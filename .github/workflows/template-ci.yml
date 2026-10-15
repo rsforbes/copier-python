@@ -136,6 +136,9 @@ jobs:
         env:
           FLAVOR: ${{ matrix.flavor }}
         run: |
+          # The script runs in the container's shell, so its $ must not
+          # expand here.
+          # shellcheck disable=SC2016
           npx --yes @devcontainers/cli@0.89.0 exec --workspace-folder "$RUNNER_TEMP/demo-project" \
             env FLAVOR="$FLAVOR" bash -euc '
               claude --version
