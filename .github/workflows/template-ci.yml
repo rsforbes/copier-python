@@ -7,6 +7,9 @@
 #   devcontainer CLI (features and post-create included), then checks the
 #   tools inside it. This catches breakage in the Dockerfile, e.g. an apt
 #   source or a Chrome download that stopped working.
+# - `pre-commit`: the template repo's own hooks on its root files.
+# - `betterleaks-pin`: the generated CI's Betterleaks version and checksum,
+#   which Renovate can only half-update.
 
 name: Template CI
 
@@ -56,6 +59,57 @@ jobs:
           git add -A
           uv run --locked pre-commit run --all-files
 
+  # The template repo's own hooks (.pre-commit-config.yaml at the root) on the
+  # root workflows and config. Betterleaks is skipped: it only scans staged
+  # changes, so --all-files gives it nothing to do.
+  pre-commit:
+    name: Template pre-commit hooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Run hooks on all files
+        # Keep in step with template/pyproject.toml.jinja and .githooks/pre-commit
+        # (which says why --python).
+        run: uvx --python 3.14 --from 'pre-commit>=4.6,<5' pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: betterleaks
+          # Enables zizmor's online audits; read-only (contents: read).
+          GH_TOKEN: ${{ github.token }}
+
+  # The generated CI downloads Betterleaks by BETTERLEAKS_VERSION and checks
+  # BETTERLEAKS_SHA256. Renovate bumps the version (with the hook revs) but
+  # can't compute the checksum, so check here that the version matches both
+  # hook revs and the checksum matches the release, before a new project
+  # finds out on its first push.
+  betterleaks-pin:
+    name: Betterleaks pin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check version and checksum
+        run: |
+          ci=template/.github/workflows/ci.yml.jinja
+          version=$(sed -n 's/^ *BETTERLEAKS_VERSION: *//p' "$ci")
+          sha256=$(sed -n 's/^ *BETTERLEAKS_SHA256: *//p' "$ci")
+          for config in template/.pre-commit-config.yaml .pre-commit-config.yaml; do
+            if ! grep -A1 'repo: https://github.com/betterleaks/betterleaks$' "$config" \
+                | grep -q "# frozen: v${version//./\\.}\$"; then
+              echo "::error::BETTERLEAKS_VERSION (${version}) in ${ci} does not match the betterleaks rev in ${config}"
+              exit 1
+            fi
+          done
+          tarball="betterleaks_${version}_linux_x64.tar.gz"
+          curl -fsSLO "https://github.com/betterleaks/betterleaks/releases/download/v${version}/${tarball}"
+          if ! echo "${sha256}  ${tarball}" | sha256sum -c -; then
+            echo "::error::BETTERLEAKS_SHA256 in ${ci} does not match the v${version} release; take the linux_x64 sha256 from its checksums.txt"
+            exit 1
+          fi
+
   devcontainer:
     name: Dev container (${{ matrix.flavor }})
     runs-on: ubuntu-latest
@@ -82,6 +136,9 @@ jobs:
         env:
           FLAVOR: ${{ matrix.flavor }}
         run: |
+          # The script runs in the container's shell, so its $ must not
+          # expand here.
+          # shellcheck disable=SC2016
           npx --yes @devcontainers/cli@0.89.0 exec --workspace-folder "$RUNNER_TEMP/demo-project" \
             env FLAVOR="$FLAVOR" bash -euc '
               claude --version

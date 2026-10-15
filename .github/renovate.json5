@@ -1,0 +1,127 @@
+// Renovate — keeps the versions pinned in this template current, so new
+// projects don't start out stale. (Generated projects use Dependabot, see
+// template/.github/dependabot.yml; this file is for the template repo only.)
+//
+// Renovate rather than Dependabot here because most pins live in `.jinja` files
+// (ci.yml.jinja, release.yml.jinja, pyproject.toml.jinja, ...), which
+// Dependabot can't be pointed at. Renovate's managers take extra file patterns,
+// and regex managers cover the pins no manager knows about.
+//
+// Every update PR runs Template CI, which generates projects from the branch
+// and runs their checks, so a bump that breaks new projects fails there.
+//
+// Policy mirrors template/.github/dependabot.yml: weekly, a 7-day release-age
+// cooldown, grouped updates, and Conventional Commit PR titles
+// ("ci(deps): ..." / "build(deps): ...") that pass the PR Title check.
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+
+  // Before Template CI's Monday 13:00 UTC run.
+  schedule: ["* 0-12 * * 1"],
+  // Wait 7 days after a release before proposing it: hijacked releases are
+  // usually caught and pulled within days. "strict" holds the PR back until
+  // then, rather than opening it with a pending check.
+  minimumReleaseAge: "7 days",
+  internalChecksFilter: "strict",
+
+  semanticCommits: "enabled",
+  semanticCommitType: "ci",
+  semanticCommitScope: "deps",
+
+  "github-actions": {
+    // The defaults already cover .github/workflows/*.yml at the root and under
+    // template/; add the rendered workflows.
+    managerFilePatterns: ["/^template/\\.github/workflows/[^/]+\\.ya?ml\\.jinja$/"],
+  },
+  devcontainer: {
+    managerFilePatterns: ["/^template/\\.devcontainer/devcontainer\\.json\\.jinja$/"],
+  },
+
+  customManagers: [
+    {
+      // Hooks pinned as `rev: <sha> # frozen: vX.Y.Z` (pre-commit autoupdate
+      // --freeze style), in the root config and the template's. Renovate's own
+      // pre-commit manager doesn't keep the SHA and the comment in step.
+      customType: "regex",
+      description: "pre-commit hook revs frozen to a SHA",
+      managerFilePatterns: ["/(^|/)\\.pre-commit-config\\.ya?ml$/"],
+      matchStrings: [
+        "repo: https://github\\.com/(?<depName>[^/\\s]+/[^/\\s]+)\\n\\s+rev: (?<currentDigest>[0-9a-f]{40}) # frozen: (?<currentValue>\\S+)",
+      ],
+      datasourceTemplate: "github-tags",
+    },
+    {
+      // Dev dependency ranges in the generated pyproject.toml. The pep621
+      // manager can't read the .jinja file: `[[ project_name ]] = ...` isn't
+      // valid TOML until rendered.
+      customType: "regex",
+      description: "Python dev dependencies in pyproject.toml.jinja",
+      managerFilePatterns: ["/^template/pyproject\\.toml\\.jinja$/"],
+      matchStrings: ['\\n\\s+"(?<depName>[A-Za-z0-9._-]+)(?<currentValue>[<>=!~][^"]*)",'],
+      datasourceTemplate: "pypi",
+      versioningTemplate: "pep440",
+    },
+    {
+      // The Trivy release trivy-action installs (`version:` input).
+      customType: "regex",
+      description: "Trivy version in the generated workflows",
+      managerFilePatterns: ["/^template/\\.github/workflows/[^/]+\\.ya?ml\\.jinja$/"],
+      matchStrings: ["trivy-config: trivy\\.yaml\\n\\s+version: (?<currentValue>v\\S+)"],
+      depNameTemplate: "aquasecurity/trivy",
+      datasourceTemplate: "github-releases",
+    },
+    {
+      // BETTERLEAKS_VERSION in the generated CI. Its BETTERLEAKS_SHA256 can't
+      // be computed by Renovate: the PR fails Template CI's checksum check
+      // until you push the new sha256 (from the release's checksums.txt) to
+      // the branch.
+      customType: "regex",
+      description: "Betterleaks version in the generated CI",
+      managerFilePatterns: ["/^template/\\.github/workflows/ci\\.yml\\.jinja$/"],
+      matchStrings: ["BETTERLEAKS_VERSION: (?<currentValue>\\S+)"],
+      depNameTemplate: "betterleaks/betterleaks",
+      datasourceTemplate: "github-releases",
+      extractVersionTemplate: "^v(?<version>.*)$",
+    },
+    {
+      // The devcontainer CLI Template CI builds containers with.
+      customType: "regex",
+      description: "devcontainer CLI in Template CI",
+      managerFilePatterns: ["/^\\.github/workflows/template-ci\\.yml$/"],
+      matchStrings: ["@devcontainers/cli@(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "@devcontainers/cli",
+      datasourceTemplate: "npm",
+    },
+  ],
+
+  packageRules: [
+    {
+      matchManagers: ["github-actions"],
+      groupName: "GitHub Actions",
+    },
+    {
+      matchManagers: ["custom.regex"],
+      matchDatasources: ["github-tags"],
+      groupName: "pre-commit hooks",
+    },
+    {
+      // Minor/patch bumps together; majors stay separate PRs so breaking
+      // changes get their own review.
+      matchDatasources: ["pypi"],
+      semanticCommitType: "build",
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "Python dev dependencies",
+    },
+    {
+      matchDatasources: ["pypi"],
+      semanticCommitType: "build",
+    },
+    {
+      // The hook rev and the CI's BETTERLEAKS_VERSION must move together (the
+      // generated CI fails when they differ), so one PR for both.
+      matchPackageNames: ["betterleaks/betterleaks"],
+      groupName: "Betterleaks",
+    },
+  ],
+}
