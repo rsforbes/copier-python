@@ -9,8 +9,13 @@ releases.
 ## Create a project
 
 ```bash
-uvx copier copy --trust gh:rsforbes/python-template ~/projects/my-project
+uvx copier copy --trust gh:<owner>/python-template ~/projects/my-project
 ```
+
+Replace `<owner>` with the GitHub user or organization hosting this template.
+`gh:` is Copier's shorthand for `https://github.com/`; any git URL works too.
+For a private repository, Copier fetches with your git credentials (e.g. after
+`gh auth setup-git`).
 
 It asks a few questions:
 

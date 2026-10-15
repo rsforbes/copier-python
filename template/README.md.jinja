@@ -71,14 +71,16 @@ Then, in the repository settings:
 
 ## Template updates
 
-This project was generated from
-[python-template](https://github.com/rsforbes/python-template) with
-[Copier](https://copier.readthedocs.io/). To pull in later template
-improvements:
+This project was generated from a [Copier](https://copier.readthedocs.io/)
+template. Its location and version are recorded in `.copier-answers.yml`
+(`_src_path` and `_commit`), which is where `copier update` pulls from. To pull
+in later template improvements:
 
 ```bash
 uvx copier update --trust
 ```
 
 Copier merges the template's changes with yours and marks any conflicts. Your
-answers are stored in `.copier-answers.yml`; don't edit it by hand.
+answers are stored in `.copier-answers.yml`; don't edit it by hand. The one
+exception: if the template moves to a new repository (one that doesn't
+redirect from the old address), update `_src_path` there.
