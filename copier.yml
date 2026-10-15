@@ -1,0 +1,119 @@
+# Copier template configuration — see README.md for usage.
+#
+# Kept deliberately short: a handful of questions, most with defaults. Add new
+# setups as `flavor` choices rather than new yes/no questions, so a new project
+# stays a few keystrokes away.
+
+_min_copier_version: "9.6" # _copier_operation (used in _tasks) needs 9.6
+_subdirectory: template
+_answers_file: .copier-answers.yml
+# Owned by release-please after the first copy; `copier update` must not reset them.
+_skip_if_exists:
+  - CHANGELOG.md
+  - .release-please-manifest.json
+
+# GitHub Actions workflows use ${{ ... }}, which collides with Jinja's default
+# {{ ... }}. Template files (*.jinja) use [[ ... ]] and [% ... %] instead.
+_envops:
+  block_start_string: "[%"
+  block_end_string: "%]"
+  variable_start_string: "[["
+  variable_end_string: "]]"
+  comment_start_string: "[#"
+  comment_end_string: "#]"
+  keep_trailing_newline: true
+
+# Run in the new project after it is generated. Needs `--trust` (see README).
+_tasks:
+  - command: git init -b main
+    when: "[[ _copier_operation == 'copy' ]]"
+  - command: uv lock
+  - command: uv sync --all-extras
+
+project_name:
+  type: str
+  help: Project name (also the GitHub repository name), e.g. my-project
+  validator: >-
+    [% if not (project_name | regex_search('^[a-z](-?[a-z0-9])+$')) %]
+    Use at least 2 characters: lowercase letters, digits and single hyphens,
+    starting with a letter and ending with a letter or digit.
+    [% elif project_name in ['and', 'as', 'assert', 'async', 'await', 'break',
+      'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'finally',
+      'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda',
+      'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while',
+      'with', 'yield'] %]
+    The package name would be a Python keyword; choose another name.
+    [% endif %]
+
+description:
+  type: str
+  help: One-line description
+  default: ""
+  # Rendered inside double-quoted TOML and Python strings.
+  validator: >-
+    [% if '"' in description or '\\' in description or '\n' in description or '\r' in description %]
+    Don't use double quotes, backslashes, or line breaks.
+    [% endif %]
+
+flavor:
+  type: str
+  help: Flavor
+  choices:
+    "base    - plain Python project": base
+    "browser - base + Google Chrome and xvfb in the dev container (nodriver, Playwright, Selenium)": browser
+  default: base
+
+# No defaults, so the template carries no personal details. To avoid retyping
+# these, put them under `defaults:` in Copier's settings file (see README.md).
+author_name:
+  type: str
+  help: Author name
+  validator: >-
+    [% if not author_name.strip() %]
+    Required.
+    [% elif '"' in author_name or '\\' in author_name or '\n' in author_name or '\r' in author_name %]
+    Don't use double quotes, backslashes, or line breaks.
+    [% endif %]
+
+author_email:
+  type: str
+  help: Author email
+  validator: >-
+    [% if '\\' in author_email or not (author_email | regex_search('^[^@\\s"]+@[^@\\s"]+\\.[^@\\s"]+$')) %]
+    Enter an email address, e.g. name@example.com.
+    [% endif %]
+
+github_owner:
+  type: str
+  help: GitHub user or organization that will own the repository
+  validator: >-
+    [% if not (github_owner | regex_search('^[A-Za-z0-9][A-Za-z0-9-]*$')) %]
+    Enter a GitHub user or organization name.
+    [% endif %]
+
+# Derived values: never asked, recomputed on every copy/update.
+package_name:
+  type: str
+  default: "[[ project_name | replace('-', '_') ]]"
+  when: false
+
+# The one Python version every project targets: the dev container image, CI,
+# .python-version (which uv uses on the host), requires-python, and ruff's
+# target-version all follow it. Not a question, so
+# it isn't stored in .copier-answers.yml: bump it here (it must match an
+# mcr.microsoft.com/devcontainers/python tag, see the Dockerfile), tag the
+# template, and `copier update` moves every project to the new version.
+python_version:
+  type: str
+  default: "3.14"
+  when: false
+
+_message_after_copy: |
+  Created [[ project_name ]] in [[ _copier_conf.dst_path ]].
+
+  Next:
+    cd [[ _copier_conf.dst_path ]]
+    git config core.hooksPath .githooks   # or open the folder in the dev container
+    uv run pytest
+
+  Before pushing to GitHub, read "First push" in the new project's README.md.

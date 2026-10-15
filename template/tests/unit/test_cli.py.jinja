@@ -1,0 +1,16 @@
+import pytest
+
+from [[ package_name ]] import __version__
+from [[ package_name ]].cli import main
+
+
+def test_main_returns_zero(capsys):
+    assert main([]) == 0
+    assert "[[ project_name ]]" in capsys.readouterr().out
+
+
+def test_version_flag(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+    assert exc.value.code == 0
+    assert __version__ in capsys.readouterr().out

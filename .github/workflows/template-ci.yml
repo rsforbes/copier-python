@@ -1,0 +1,98 @@
+# Template CI — generate projects from this template and run their checks, so
+# a template change that breaks new projects fails here first.
+#
+# - `generate`: the generated project's lint, tests, CLI, and pre-commit hooks.
+#   Flavors only differ in the dev container, so this runs on `base` alone.
+# - `devcontainer`: builds and starts each flavor's dev container with the
+#   devcontainer CLI (features and post-create included), then checks the
+#   tools inside it. This catches breakage in the Dockerfile, e.g. an apt
+#   source or a Chrome download that stopped working.
+
+name: Template CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 13 * * 1' # Mondays 13:00 UTC: external downloads can break with no commit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    name: Generate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # Copier reads the template's git history and tags
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Generate project
+        run: |
+          uvx copier copy --trust --defaults --vcs-ref HEAD \
+            --data-file .github/ci-answers.yml . "$RUNNER_TEMP/demo-project"
+      - name: Lint
+        working-directory: ${{ runner.temp }}/demo-project
+        run: |
+          uv run --locked ruff format --check .
+          uv run --locked ruff check .
+      - name: Test
+        working-directory: ${{ runner.temp }}/demo-project
+        run: |
+          uv run --locked pytest
+          uv run --locked demo-project --version
+      # Every hook the generated project's own CI runs (Semgrep, actionlint,
+      # zizmor), so a template file a hook flags fails here, not in each new
+      # project. Betterleaks is skipped as in the project's CI.
+      - name: Run pre-commit hooks
+        working-directory: ${{ runner.temp }}/demo-project
+        env:
+          SKIP: betterleaks
+        run: |
+          git add -A
+          uv run --locked pre-commit run --all-files
+
+  devcontainer:
+    name: Dev container (${{ matrix.flavor }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [base, browser]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Generate project
+        env:
+          FLAVOR: ${{ matrix.flavor }}
+        run: |
+          uvx copier copy --trust --defaults --vcs-ref HEAD \
+            --data-file .github/ci-answers.yml -d flavor="$FLAVOR" \
+            . "$RUNNER_TEMP/demo-project"
+      - name: Build and start the dev container
+        run: npx --yes @devcontainers/cli@0.89.0 up --workspace-folder "$RUNNER_TEMP/demo-project"
+      - name: Check tools inside the container
+        env:
+          FLAVOR: ${{ matrix.flavor }}
+        run: |
+          npx --yes @devcontainers/cli@0.89.0 exec --workspace-folder "$RUNNER_TEMP/demo-project" \
+            env FLAVOR="$FLAVOR" bash -euc '
+              claude --version
+              gh --version | head -1
+              # The container must use its own venv, not the host .venv in
+              # the bind mount (created by the uv sync task in copier.yml).
+              test "$(uv run --locked python -c "import sys; print(sys.prefix)")" \
+                = "$UV_PROJECT_ENVIRONMENT"
+              uv run --locked pytest
+              if [ "$FLAVOR" = browser ]; then
+                google-chrome --version
+                xvfb-run -a true
+              fi
+            '

@@ -1,0 +1,7 @@
+# Answers Template CI passes to Copier (--data-file) for the questions without
+# defaults. The devcontainer job sets the flavor from its matrix.
+project_name: demo-project
+description: Template CI
+author_name: Template CI
+author_email: ci@example.com
+github_owner: example

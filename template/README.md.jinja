@@ -1,0 +1,84 @@
+# [[ project_name ]]
+
+[[ description ]]
+
+## Getting started
+
+Requires [uv](https://docs.astral.sh/uv/) (or use the dev container, which has
+everything installed).
+
+```bash
+uv sync                                # create .venv with all dependencies
+git config core.hooksPath .githooks    # enable the pre-commit hooks (the dev container does this)
+uv run [[ project_name ]] --help
+```
+
+Code lives in `src/[[ package_name ]]/`. The command-line entry point is
+`src/[[ package_name ]]/cli.py` (run as `[[ project_name ]]` or
+`python -m [[ package_name ]]`). Delete it and the `[project.scripts]` entry in
+`pyproject.toml` if the project doesn't need a CLI.
+
+Add dependencies with `uv add <package>` (or `uv add --dev <package>` for
+tooling); both update `pyproject.toml` and `uv.lock`.
+[%- if flavor == 'browser' %]
+
+### Browser automation
+
+The dev container includes Google Chrome and `xvfb`. The container has no
+screen, so run browser code under a virtual display:
+
+```bash
+xvfb-run -a uv run python your_script.py
+```
+
+Prefer branded Chrome over unbranded Chromium: sites behind bot protection
+(e.g. Cloudflare) tend to detect Chromium. Chrome is installed only on amd64
+hosts; on arm64 (e.g. Apple Silicon) the container builds without it.
+[%- endif %]
+
+## Development
+
+```bash
+uv run pytest                          # unit tests (tests/unit)
+RUN_INTEGRATION=1 uv run pytest tests/integration   # integration tests (real services)
+uv run ruff format .                   # format
+uv run ruff check --fix .              # lint
+uv run pre-commit run --all-files      # secrets, SAST, workflow lint/audit
+```
+
+Pull request titles must follow
+[Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/); they
+drive versioning and the changelog. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## First push
+
+One-time GitHub setup after creating the repository:
+
+```bash
+git add -A && git commit -m "chore: initial commit from python-template"
+gh repo create [[ github_owner ]]/[[ project_name ]] --private --source . --push
+```
+
+Then, in the repository settings:
+
+1. **Settings > General > Pull Requests**: allow squash merging only, and use
+   the pull request title as the default commit message.
+2. **Settings > Actions > General**: enable "Allow GitHub Actions to create and
+   approve pull requests" so release-please can open its release PR (or set up
+   the GitHub App described at the top of `.github/workflows/release.yml`).
+3. **Settings > Branches** (optional): protect `main` and require the **CI**
+   status check.
+
+## Template updates
+
+This project was generated from
+[python-template](https://github.com/rsforbes/python-template) with
+[Copier](https://copier.readthedocs.io/). To pull in later template
+improvements:
+
+```bash
+uvx copier update --trust
+```
+
+Copier merges the template's changes with yours and marks any conflicts. Your
+answers are stored in `.copier-answers.yml`; don't edit it by hand.

@@ -1,0 +1,80 @@
+[project]
+name = "[[ project_name ]]"
+# 0.0.0 until the first release: release-please bumps it (a `feat` makes the
+# first release 0.1.0, a `fix` 0.0.1). Don't edit by hand.
+version = "0.0.0"
+description = "[[ description ]]"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=[[ python_version ]]"
+authors = [{ name = "[[ author_name ]]", email = "[[ author_email ]]" }]
+classifiers = [
+  "Private :: Do Not Upload",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: [[ python_version ]]",
+]
+dependencies = []
+
+[project.scripts]
+[[ project_name ]] = "[[ package_name ]].cli:main"
+
+[project.urls]
+Repository = "https://github.com/[[ github_owner ]]/[[ project_name ]]"
+
+[dependency-groups]
+dev = [
+  "pre-commit>=4.6,<5",
+  "pytest>=9.0,<10",
+  "pytest-asyncio>=1.3,<2",
+  "pytest-mock>=3.14,<4",
+  "ruff>=0.15.4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/[[ package_name ]]"]
+
+# Hatchling's sdist default is every git-tracked file, which would ship editor,
+# dev container, CI, and tool config. Keep what's useful outside the repo.
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/[[ package_name ]]",
+  "tests",
+  "README.md",
+  "CHANGELOG.md",
+  "LICENSE",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py[[ python_version | replace('.', '') ]]"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Listed explicitly, so a ruff upgrade cannot switch on new rules by itself.
+# E4/E7/E9 + F: pycodestyle's error checks and pyflakes (the formatter owns
+# style, so pycodestyle's style rules stay off). I: import order (isort).
+# B: flake8-bugbear, likely bugs such as mutable default arguments.
+select = ["E4", "E7", "E9", "F", "I", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["[[ package_name ]]"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+pythonpath = ["src"]
+
+# Async tests use explicit @pytest.mark.asyncio markers; pin strict mode so the
+# suite doesn't depend on it remaining pytest-asyncio's default.
+asyncio_mode = "strict"
+
+addopts = "--strict-markers"
+markers = [
+  "unit: Unit tests (default)",
+  "integration: Integration tests requiring external services",
+  "slow: Tests that take significant time to run",
+]

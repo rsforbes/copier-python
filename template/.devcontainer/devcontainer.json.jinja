@@ -1,0 +1,96 @@
+{
+    // Display name for this dev container configuration
+    "name": "[[ project_name ]]",
+    
+    // Build configuration for the container
+    "build": {
+        // Path to the Dockerfile relative to the build context
+        "dockerfile": "Dockerfile",
+        // Build context directory - ".." means parent directory of .devcontainer folder
+        // This allows Docker to access project files outside the .devcontainer directory
+        "context": ".."
+    },
+
+    // Mount the repo at /workspaces/<project_name> (not the CLI default
+    // /workspaces/<local folder name>) so it matches the Dockerfile's WORKDIR.
+    // The path is per project on purpose: Claude Code keys its per-project
+    // state (session history, memory, trust) by path in the shared
+    // claude-code-home volume below, so a fixed path like /workspace would mix
+    // every project's history and memory together.
+    "workspaceFolder": "/workspaces/[[ project_name ]]",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/[[ project_name ]],type=bind,consistency=cached",
+
+    // Dev container features layered onto the image. The github-cli feature
+    // installs `gh` via the devcontainers-maintained recipe, avoiding a manual
+    // apt/gpg setup in the Dockerfile.
+    "features": {
+        "ghcr.io/devcontainers/features/github-cli:1": {}
+    },
+
+    // VS Code specific customizations
+    "customizations": {
+        "vscode": {
+            // Extensions to install automatically in the container
+            // Ruff replaces the black/flake8/isort/pylint extensions; it both
+            // formats and lints Python.
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "charliermarsh.ruff",
+                "tamasfe.even-better-toml"
+            ],
+
+            // Container-only VS Code settings. Editor, formatter, Ruff and
+            // Python settings live in .vscode/settings.json, which applies both
+            // in and out of the container.
+            "settings": {
+                // Set bash as the default terminal shell in Linux containers
+                // This ensures consistent shell behavior across different environments
+                "terminal.integrated.defaultProfile.linux": "bash",
+                // The container's virtualenv lives outside the workspace (see
+                // UV_PROJECT_ENVIRONMENT in the Dockerfile). This is set here,
+                // not in .vscode/settings.json, because workspace settings
+                // would override it; on the host, VS Code finds ./.venv itself.
+                "python.defaultInterpreterPath": "/home/vscode/.venv/bin/python"
+            }
+        }
+    },
+    
+    // Ports to forward from the container to the host, e.g. [8000] for a dev
+    // server.
+    "forwardPorts": [],
+
+    // Default bridge networking, not --network=host: the container (and Claude
+    // Code in it) gets internet access but not the host's localhost, so
+    // services that listen only there (databases, admin APIs) stay out of
+    // reach. To use a service on the host, connect to host.docker.internal
+    // instead of localhost; the --add-host below makes that name work on
+    // Linux Docker Engine too (Docker Desktop provides it already).
+    "runArgs": ["--add-host=host.docker.internal:host-gateway"],
+
+    // Persist Claude Code state across container rebuilds. A named volume backs
+    // ~/.claude (login, session history, per-project data, and memory) so it
+    // survives "Rebuild Container". The volume is shared by every project made
+    // from this template, so you log in once. post_create_command.sh fixes its
+    // ownership since named volumes are created root-owned. Claude Code itself
+    // is installed by the Dockerfile (see the comment there for why).
+    "mounts": [
+        "source=claude-code-home,target=/home/vscode/.claude,type=volume"
+    ],
+
+    // By default Claude Code also keeps state in ~/.claude.json, outside the
+    // volume, so a rebuild would reset onboarding and preferences. Pointing
+    // CLAUDE_CONFIG_DIR at the volume keeps all of it in one persisted place.
+    "containerEnv": {
+        "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
+    },
+
+    // User to connect as when attaching to the container
+    // "vscode" user has proper permissions and development tools pre-configured
+    "remoteUser": "vscode",
+
+    // Command to run after the container is created and VS Code connects
+    // This executes the post-create script that sets up uv and dependencies
+    // Runs only once when the container is first created, not on every restart
+    "postCreateCommand": "bash .devcontainer/post_create_command.sh"
+}

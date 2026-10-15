@@ -1,0 +1,13 @@
+"""[[ description or project_name ]]"""
+
+import logging
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("[[ project_name ]]")
+except PackageNotFoundError:  # running from a source tree without installing
+    __version__ = "0+unknown"
+
+# Library code logs through this package's logger; the application decides
+# where log output goes.
+logging.getLogger(__name__).addHandler(logging.NullHandler())

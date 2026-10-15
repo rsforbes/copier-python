@@ -1,0 +1,83 @@
+# Python version and base OS for the container: the project's Python (the
+# template's `python_version`) on Debian 13 "trixie". Image major version 2 is
+# the line that publishes Python 3.14 (major 1 stops at 3.13); list tags at
+# https://mcr.microsoft.com/v2/devcontainers/python/tags/list
+ARG VARIANT="[[ python_version ]]-trixie"
+
+# Use Microsoft's official Python dev container as the base image
+FROM mcr.microsoft.com/devcontainers/python:2-${VARIANT}
+
+# pipefail: a failed download in `curl ... | sh` fails the build instead of
+# piping an empty script to the shell, which exits 0 and leaves the tool out.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# The base image's Yarn apt source (unused here) carries a signing key apt
+# can't verify, so `apt-get update` fails. Drop it in every flavor, before
+# anything (this file, or a dev container feature) needs apt.
+RUN rm -f /etc/apt/sources.list.d/yarn.list
+[%- if flavor == 'browser' %]
+
+# Browser stack for driving a real Chrome (nodriver, Playwright, Selenium):
+# - google-chrome-stable: branded Chrome. Sites behind bot protection (e.g.
+#   Cloudflare) tend to detect unbranded Chromium and never clear the challenge.
+# - xvfb: virtual display. This container has no screen, and bot challenges are
+#   not reliably solved headless, so run browser code under `xvfb-run -a`.
+# Google ships Linux Chrome for amd64 only; on other architectures (e.g. arm64
+# on Apple Silicon) Chrome is skipped so the container still builds.
+RUN CHROME_DEB="" \
+    && if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+        curl -fsSLo /tmp/chrome.deb \
+            https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+        && CHROME_DEB=/tmp/chrome.deb; \
+    fi \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        $CHROME_DEB xvfb xauth \
+    && rm -rf /tmp/chrome.deb /var/lib/apt/lists/*
+[%- endif %]
+
+# Switch from root to the vscode user for security and proper file permissions
+# The vscode user is pre-configured in the base image with development tools
+USER vscode
+
+# Install uv, the Python package/project manager.
+# The installer drops the `uv`/`uvx` binaries into ~/.local/bin.
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Claude Code CLI, baked into the image so every rebuild has it with no manual
+# step. It runs here rather than on the host so its file edits and shell
+# commands stay sandboxed in the container, which matters most when running
+# with fewer permission prompts. The VS Code extension wouldn't change that
+# (attached to a dev container, extensions run inside it too); it's only a
+# different interface. From the CLI in VS Code's integrated terminal, `/ide`
+# connects to the editor for diff viewing and selection context.
+#
+# Native installer rather than Anthropic's dev container feature
+# (ghcr.io/anthropics/devcontainer-features/claude-code): the feature installs
+# through npm and so needs Node.js, while the native build is self-contained
+# and auto-updates. It lands in ~/.local/bin; login, settings, and history live
+# in ~/.claude, which devcontainer.json persists in a named volume so rebuilds
+# don't log you out. Set CLAUDE_CODE_VERSION to "latest" or e.g. "2.1.0" to
+# pin a release.
+ARG CLAUDE_CODE_VERSION="stable"
+RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}"
+
+# Add the installers' directory (~/.local/bin: uv, uvx, claude) to PATH
+ENV PATH="/home/vscode/.local/bin:$PATH"
+
+# Keep the container's virtualenv out of the workspace. The workspace is the host's
+# project folder, bind-mounted, so a ./.venv there would be shared with any
+# `uv sync` run on the host; each side finds the other's interpreter invalid
+# and rebuilds it. In the container's home directory the two never collide:
+# the host keeps its own ./.venv. Put uv's cache on /tmp so it doesn't bloat
+# the image.
+# UV_PYTHON_PREFERENCE=only-managed: the base image's Python can lag several
+# patch releases behind (3.14.0 when 3.14.8 was current), so have uv install
+# the latest patch of the .python-version release, as it does on the host and
+# in CI, and every environment runs the same Python.
+ENV UV_PROJECT_ENVIRONMENT="/home/vscode/.venv" \
+    UV_CACHE_DIR="/tmp/uv-cache" \
+    UV_PYTHON_PREFERENCE="only-managed"
+
+# Set the working directory where your project files will be mounted
+WORKDIR /workspaces/[[ project_name ]]

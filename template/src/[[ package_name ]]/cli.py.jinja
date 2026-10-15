@@ -1,0 +1,28 @@
+"""Command-line entry point (`[[ project_name ]]` or `python -m [[ package_name ]]`)."""
+
+import argparse
+import logging
+from collections.abc import Sequence
+
+from [[ package_name ]] import __version__
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="[[ project_name ]]",
+        description="[[ description or project_name ]]",
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="enable debug logging"
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+    print("Hello from [[ project_name ]]!")
+    return 0
