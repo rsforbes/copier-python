@@ -1,0 +1,43 @@
+# pre-commit hooks for the template repo itself — the same hooks generated
+# projects get (template/.pre-commit-config.yaml; see the comments there for
+# what each one does). Run on `git commit` once enabled with
+# `git config core.hooksPath .githooks`; run every hook against the whole tree
+# with `uvx --python 3.14 pre-commit run --all-files`. Template CI runs this
+# file too.
+#
+# What they cover here: the root workflows (template-ci.yml, release.yml,
+# pr-title.yml) and config files, plus secrets in anything committed. Files
+# under template/ are also checked by Template CI, which runs the template's
+# hooks against a generated project, i.e. on the rendered files.
+#
+# Revs are pinned to commit SHAs; Renovate keeps them in step with the
+# template's copy (see .github/renovate.json5).
+repos:
+  - repo: https://github.com/betterleaks/betterleaks
+    rev: 81aff7a638638aae3a659845d089043e1d8fe9ac # frozen: v1.9.0
+    hooks:
+      - id: betterleaks
+
+  - repo: https://github.com/semgrep/pre-commit
+    rev: 4ff553594543409411f3fe5c1a618910dadd1d6f # frozen: v1.179.0
+    hooks:
+      - id: semgrep
+        types_or: [yaml]
+        require_serial: true
+        args:
+          - --config=p/security-audit
+          - --config=p/github-actions
+          - --metrics=off
+          - --error
+          - --quiet
+          - --disable-version-check
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: 914e7df21a07ef503a81201c76d2b11c789d3fca # frozen: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: fa412071e4f5d44d44f9e365f4676f9df92456a2 # frozen: v1.30.1
+    hooks:
+      - id: zizmor

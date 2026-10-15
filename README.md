@@ -81,12 +81,34 @@ changes. To change an answer at the same time, e.g. switch flavor:
   (3.14). When a new Python ships, bump it there (check the dev container image
   has a matching tag, see `template/.devcontainer/Dockerfile.jinja`), tag the
   template, and run `copier update` in each project.
-- Tag a release (`git tag v0.2.0 && git push --tags`) so `copier update` in
-  existing projects picks it up; Copier uses tags, not the branch head.
 - CI (`.github/workflows/template-ci.yml`) generates projects and runs their
   lint, tests, and workflow checks, and builds and starts each flavor's dev
   container. It also runs weekly, since the Dockerfile downloads things that
   can break without a commit. Its answers are in `.github/ci-answers.yml`.
+
+### Hooks, versions, and releases
+
+The template repo uses the same tooling it gives projects:
+
+- **Pre-commit hooks** (`.pre-commit-config.yaml`): Betterleaks, Semgrep,
+  actionlint, and zizmor on the template's own files. Enable them once per
+  clone with `git config core.hooksPath .githooks` (needs uv); run them all
+  with `uvx --python 3.14 pre-commit run --all-files`. Template CI runs them too.
+- **PR titles** follow Conventional Commits (`.github/workflows/pr-title.yml`),
+  since squash-merged titles drive versioning.
+- **Renovate** (`.github/renovate.json5`) keeps the versions pinned under
+  `template/` current: action SHAs (including in `.jinja` workflows), hook
+  revs, dev dependency ranges, Trivy, Betterleaks, and the dev container
+  feature. Each PR runs Template CI against a generated project. Betterleaks
+  PRs need one manual step: push the new `BETTERLEAKS_SHA256` (from the
+  release's `checksums.txt`) to the PR branch; the `betterleaks-pin` job fails
+  until you do. Renovate runs as the
+  [Renovate GitHub App](https://github.com/apps/renovate), installed on this
+  repository.
+- **Releases** (`.github/workflows/release.yml`): release-please keeps a
+  release PR open; merging it tags the next version and writes `CHANGELOG.md`.
+  `copier update` in existing projects moves to the newest tag, not to main,
+  so merge the release PR to ship template fixes.
 
 ### Adding a flavor
 

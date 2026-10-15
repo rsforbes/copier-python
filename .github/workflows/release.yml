@@ -1,0 +1,71 @@
+# Release — tags template versions via release-please
+# (https://github.com/googleapis/release-please).
+#
+# Tags matter because `copier update` in a generated project moves to the
+# template's newest tag, not to main: a fix merged without a tag never reaches
+# existing projects. On every push to main, release-please keeps a
+# "chore(main): release X.Y.Z" PR open with the next version and the
+# CHANGELOG.md entry built from the Conventional Commit subjects since the last
+# release (`feat` → minor, `fix` → patch, `!` → major). `build` and `ci` are
+# releasable too (patch), so Renovate's pin bumps get tagged and reach
+# projects; docs/chore/refactor/test/style alone don't cut a release.
+# Merging it tags vX.Y.Z
+# and creates the GitHub release, whose notes tell project owners what an
+# update brings.
+#
+# Unlike generated projects' release.yml, there is nothing to build: the
+# template is used straight from git.
+#
+# Settings: release-please-config.json; current version:
+# .release-please-manifest.json. `bootstrap-sha` there marks v0.1.1, the last
+# release tagged by hand, so the first changelog starts after it.
+#
+# Token: as in the generated release.yml — a GitHub App when the
+# RELEASE_APP_CLIENT_ID and RELEASE_APP_PRIVATE_KEY secrets are set (Contents,
+# Pull requests, and Issues read/write), otherwise GITHUB_TOKEN, which needs
+# "Allow GitHub Actions to create and approve pull requests" enabled under
+# Settings > Actions > General. PRs opened with GITHUB_TOKEN don't trigger
+# workflows, so the release PR gets no Template CI run; it only touches
+# CHANGELOG.md and the manifest, so that's fine.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+# Never run two release-please passes at once (they'd race on the release PR),
+# and never cancel one mid-release.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release PR / tag
+    runs-on: ubuntu-latest
+    permissions:
+      # Used only by the GITHUB_TOKEN fallback; the app brings its own.
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      RELEASE_APP_CLIENT_ID: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+    steps:
+      - name: Get GitHub App token
+        id: app-token
+        if: ${{ env.RELEASE_APP_CLIENT_ID != '' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
