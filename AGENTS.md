@@ -42,4 +42,14 @@ For root files, run this repo's hooks:
   version in a trailing comment (`@<sha> # vX.Y.Z`, `rev: <sha> # frozen:
   vX.Y.Z`); Renovate updates both.
 - Comments explain why, not what. Match the surrounding comment style.
-- PR titles use Conventional Commits; they drive template releases.
+- PR titles use Conventional Commits; they drive template releases, and
+  `copier update` only reaches projects through a release. So a change to
+  anything under `template/` takes a releasable type even when it's only
+  documentation: `feat` for something new in projects, `fix` for a
+  correction, `build`/`ci` for dependency and workflow changes. Use `docs`,
+  `chore`, `refactor`, `style`, or `test` only for changes outside
+  `template/`; they don't cut a release.
+- Squash-merge with the PR title as the commit subject
+  (`gh pr merge <n> --squash --subject "<PR title>"`): for a single-commit PR,
+  GitHub otherwise uses the commit's own message, which may not be the type
+  you meant.

@@ -77,6 +77,9 @@ The template repo uses the same tooling it gives projects:
   [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
   (`.github/workflows/pr-title.yml`). Pull requests are squash-merged, so the
   title becomes the commit on `main` and drives the version and changelog.
+  A change under `template/` needs a releasable type (`feat`, `fix`, `build`,
+  `ci`) even when it's only documentation, or it won't reach projects:
+  `docs:` and `chore:` don't cut a release.
 - **Renovate** (`.github/renovate.json5`) keeps the versions pinned under
   `template/` current: action SHAs (including in `.jinja` workflows), hook
   revs, dev dependency ranges, Trivy, Betterleaks, and the dev container
