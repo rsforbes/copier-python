@@ -1,0 +1,43 @@
+# AGENTS.md
+
+Instructions for coding agents working on `[[ project_name ]]`. Full detail
+for humans is in [README.md](README.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Layout
+
+- Package code: `src/[[ package_name ]]/`. CLI entry point:
+  `src/[[ package_name ]]/cli.py`.
+- Unit tests: `tests/unit/` (the default `pytest` run).
+- Integration tests: `tests/integration/`, marked `integration`, talking to
+  real services; they skip unless `RUN_INTEGRATION=1` is set.
+- Python [[ python_version ]] only (`.python-version`); dependencies are
+  managed with uv (`pyproject.toml` + `uv.lock`).
+
+## Commands
+
+```bash
+uv sync                               # install dependencies
+uv run pytest                         # unit tests
+uv run ruff format .                  # format
+uv run ruff check --fix .             # lint
+uv run pre-commit run --all-files     # secrets, SAST, workflow lint/audit
+uv add <package>                      # add a dependency (--dev for tooling)
+```
+
+Run tests, format, and lint before finishing a change. Don't edit `uv.lock`
+by hand; use `uv add`, `uv remove`, or `uv lock`.
+
+## Conventions
+
+- Pull request titles follow
+  [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+  (`feat:`, `fix:`, `docs:`, ...): PRs are squash-merged, so the title sets
+  the version bump and changelog entry.
+- Don't bump the version or edit `CHANGELOG.md`; release-please does both.
+- Pin GitHub Actions and pre-commit hook revs to full commit SHAs with the
+  version in a trailing comment; Dependabot updates them.
+- Don't suppress a security finding (Betterleaks, Semgrep, zizmor, Trivy)
+  without confirming it's a false positive; suppress narrowly, with a comment
+  saying why (see CONTRIBUTING.md).
+- `.copier-answers.yml` is managed by Copier; don't edit it. Template updates
+  come in with `uvx copier update --trust`.
