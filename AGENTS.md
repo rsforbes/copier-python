@@ -53,3 +53,14 @@ For root files, run this repo's hooks:
   add a footer (`Release-As: X.Y.Z`, or a `BREAKING CHANGE:` explanation),
   pass it at merge time with `gh pr merge <n> --squash --body "..."`; footers
   in the PR description don't carry over.
+- A PR merged with the wrong type (e.g. `docs:` for a change under
+  `template/`): add this to the merged PR's description, then run the Release
+  workflow (or wait for the next push to main). Release-please uses it in
+  place of the commit message, for the version bump and the changelog. It only
+  works until that change is released.
+
+  ```
+  BEGIN_COMMIT_OVERRIDE
+  feat: <corrected title>
+  END_COMMIT_OVERRIDE
+  ```
