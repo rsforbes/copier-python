@@ -49,7 +49,7 @@ For root files, run this repo's hooks:
   correction, `build`/`ci` for dependency and workflow changes. Use `docs`,
   `chore`, `refactor`, `style`, or `test` only for changes outside
   `template/`; they don't cut a release.
-- Squash-merge with the PR title as the commit subject
-  (`gh pr merge <n> --squash --subject "<PR title>"`): for a single-commit PR,
-  GitHub otherwise uses the commit's own message, which may not be the type
-  you meant.
+- Squash merges use the PR title as the commit subject and an empty body. To
+  add a footer (`Release-As: X.Y.Z`, or a `BREAKING CHANGE:` explanation),
+  pass it at merge time with `gh pr merge <n> --squash --body "..."`; footers
+  in the PR description don't carry over.
