@@ -3,8 +3,8 @@
 A [Copier](https://copier.readthedocs.io/) template for Python projects:
 uv, Ruff, pytest, a dev container, pre-commit security hooks (Betterleaks,
 Semgrep, actionlint, zizmor), CI on the template's one Python version, Trivy
-dependency scanning, Dependabot, and release-please versioning with GitHub
-releases.
+dependency scanning, Dependabot, release-please versioning with GitHub
+releases, and an `AGENTS.md` for coding agents such as Claude Code.
 
 ## Create a project
 
@@ -29,8 +29,17 @@ It asks a few questions:
 ### Your defaults
 
 The template holds no personal details. To skip retyping yours, put them in
-Copier's settings file, `~/.config/copier/settings.yml` (Linux; run
-`uvx copier --help` and see "settings" for macOS/Windows paths):
+Copier's settings file, `settings.yml`, in your platform's config folder:
+
+| Platform | Settings file |
+| --- | --- |
+| Linux (including WSL) | `~/.config/copier/settings.yml` (or under `$XDG_CONFIG_HOME`) |
+| macOS | `~/Library/Application Support/copier/settings.yml` |
+| Windows | `%USERPROFILE%\AppData\Local\copier\settings.yml` |
+
+Or point the `COPIER_SETTINGS_PATH` environment variable at a file anywhere.
+Copier reads the file on the system where it runs, so under WSL that's the
+Linux path inside WSL.
 
 ```yaml
 defaults:
@@ -49,13 +58,6 @@ They become the suggested answers; you just press Enter.
 `git init`, `uv lock`, and `uv sync`. Without it Copier refuses to run them.
 Then follow "First push" in the new project's README.
 
-From a local clone instead of GitHub, add `--vcs-ref HEAD` to use your latest
-commit rather than the latest tag:
-
-```bash
-uvx copier copy --trust --vcs-ref HEAD ~/projects/python-template ~/projects/my-project
-```
-
 ## Update a project from the template
 
 Inside a generated project (committed, clean working tree):
@@ -70,50 +72,5 @@ changes. To change an answer at the same time, e.g. switch flavor:
 
 ## Working on the template
 
-- Everything under `template/` is copied into new projects. Files ending in
-  `.jinja` are rendered (the suffix is dropped); everything else is copied
-  as-is.
-- Template variables use `[[ var ]]` and `[% if ... %]` instead of Jinja's
-  usual `{{ }}`, because GitHub Actions workflows are full of `${{ }}`.
-- Questions live in `copier.yml`. Prefer adding a `flavor` choice over a new
-  yes/no question.
-- Every project targets one Python version, `python_version` in `copier.yml`
-  (3.14). When a new Python ships, bump it there (check the dev container image
-  has a matching tag, see `template/.devcontainer/Dockerfile.jinja`), tag the
-  template, and run `copier update` in each project.
-- CI (`.github/workflows/template-ci.yml`) generates projects and runs their
-  lint, tests, and workflow checks, and builds and starts each flavor's dev
-  container. It also runs weekly, since the Dockerfile downloads things that
-  can break without a commit. Its answers are in `.github/ci-answers.yml`.
-
-### Hooks, versions, and releases
-
-The template repo uses the same tooling it gives projects:
-
-- **Pre-commit hooks** (`.pre-commit-config.yaml`): Betterleaks, Semgrep,
-  actionlint, and zizmor on the template's own files. Enable them once per
-  clone with `git config core.hooksPath .githooks` (needs uv); run them all
-  with `uvx --python 3.14 pre-commit run --all-files`. Template CI runs them too.
-- **PR titles** follow Conventional Commits (`.github/workflows/pr-title.yml`),
-  since squash-merged titles drive versioning.
-- **Renovate** (`.github/renovate.json5`) keeps the versions pinned under
-  `template/` current: action SHAs (including in `.jinja` workflows), hook
-  revs, dev dependency ranges, Trivy, Betterleaks, and the dev container
-  feature. Each PR runs Template CI against a generated project. Betterleaks
-  PRs need one manual step: push the new `BETTERLEAKS_SHA256` (from the
-  release's `checksums.txt`) to the PR branch; the `betterleaks-pin` job fails
-  until you do. Renovate runs as the
-  [Renovate GitHub App](https://github.com/apps/renovate), installed on this
-  repository.
-- **Releases** (`.github/workflows/release.yml`): release-please keeps a
-  release PR open; merging it tags the next version and writes `CHANGELOG.md`.
-  `copier update` in existing projects moves to the newest tag, not to main,
-  so merge the release PR to ship template fixes.
-
-### Adding a flavor
-
-1. Add a choice to `flavor` in `copier.yml`.
-2. Guard flavor-specific content in `.jinja` files with
-   `[% if flavor == 'name' %] ... [% endif %]`.
-3. Add the flavor to the `devcontainer` job's matrix in `template-ci.yml`,
-   plus any checks for what it installs.
+See [CONTRIBUTING.md](CONTRIBUTING.md): how the template is laid out, trying a
+change locally, CI, Renovate, releases, and adding a flavor.
