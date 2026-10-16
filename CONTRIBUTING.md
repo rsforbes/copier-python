@@ -93,7 +93,11 @@ The template repo uses the same tooling it gives projects:
   release PR open; merging it tags the next version and writes `CHANGELOG.md`.
   `feat` bumps the minor version; `fix`, `perf`, `build`, and `ci` the patch.
   `copier update` in existing projects moves to the newest tag, not to main,
-  so merge the release PR to ship template fixes.
+  so merge the release PR to ship template fixes. If a PR merged with the
+  wrong type, fix it before it's released: add a `BEGIN_COMMIT_OVERRIDE` /
+  `END_COMMIT_OVERRIDE` block with the corrected message to the merged PR's
+  description, and release-please uses that instead (see
+  [its docs](https://github.com/googleapis/release-please#how-can-i-fix-release-notes)).
 
 ## Adding a flavor
 
