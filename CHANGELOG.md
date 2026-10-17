@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/rsforbes/python-template/compare/v0.2.0...v0.3.0) (2026-10-17)
+
+
+### Features
+
+* add Claude Code guardrails, .env.example, and Playwright browser flavor ([#8](https://github.com/rsforbes/python-template/issues/8)) ([939dc02](https://github.com/rsforbes/python-template/commit/939dc020e3172ad8051d13f1f44c94ed3671ae66))
+
 ## [0.2.0](https://github.com/rsforbes/python-template/compare/v0.1.2...v0.2.0) (2026-10-16)
 
 
