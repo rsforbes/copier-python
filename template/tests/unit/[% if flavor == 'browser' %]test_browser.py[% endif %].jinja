@@ -1,0 +1,65 @@
+"""Browser tests: each page is built by the test itself, so no live site is
+needed and CI stays reliable.
+
+`page` and `browser` are pytest-playwright fixtures. They run headless by
+default; watch a test with `uv run pytest --headed --slowmo 500`, or stop in
+Playwright's Inspector with `page.pause()`.
+"""
+
+import subprocess
+import sys
+
+import pytest
+from playwright.sync_api import Browser, Page, expect
+
+from [[ package_name ]].browser import HEADLESS_VIEWPORT, new_context
+from [[ package_name ]].cli import main
+
+PAGE_HTML = """
+<title>Example</title>
+<button onclick="this.textContent = 'Clicked'">Click me</button>
+"""
+
+
+def test_click_updates_button(page: Page):
+    page.set_content(PAGE_HTML)
+    page.get_by_role("button", name="Click me").click()
+    expect(page.get_by_role("button")).to_have_text("Clicked")
+
+
+def test_headless_context_uses_desktop_viewport(browser: Browser):
+    context = new_context(browser, headless=True)
+    try:
+        assert context.new_page().viewport_size == HEADLESS_VIEWPORT
+    finally:
+        context.close()
+
+
+def test_cli_opens_page_and_records_trace(tmp_path):
+    # A separate process: Playwright's sync API allows one instance per
+    # process, and the fixtures above already hold this one's.
+    trace = tmp_path / "trace.zip"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "[[ package_name ]]",
+            "--open",
+            "data:text/html,<title>Example</title>",
+            "--headless",
+            "--trace",
+            str(trace),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == "Example"
+    assert trace.stat().st_size > 0
+
+
+def test_cli_browser_flags_need_open(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["--trace", "run.zip"])
+    assert exc.value.code == 2
+    assert "need --open" in capsys.readouterr().err

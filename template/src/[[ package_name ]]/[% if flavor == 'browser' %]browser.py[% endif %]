@@ -1,0 +1,82 @@
+"""Browser automation with Playwright: headed while you build it, headless once
+it works.
+
+`open_page()` launches Chromium and hands back a page. Headed (the default) is
+for working out a flow: you watch it run, and `pause()` (or Playwright's own
+`page.pause()`, which opens the Inspector) stops it where you want to look.
+Headless is for when the flow works: unattended runs and CI.
+
+Headed needs a display from your machine. On Windows, WSLg provides one,
+including inside the dev container; on other systems, run headed outside the
+container or set up a display yourself.
+"""
+
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+
+from playwright.sync_api import (
+    Browser,
+    BrowserContext,
+    Page,
+    ViewportSize,
+    sync_playwright,
+)
+
+# Headed, the window is maximized and the page follows the window, so you see
+# a real desktop-width browser. Headless there's no window manager to size a
+# window (Chromium falls back to 800x600), so state a desktop viewport instead:
+# responsive sites serve a different layout, with different elements, below
+# desktop width.
+HEADED_ARGS = ["--start-maximized"]
+HEADLESS_VIEWPORT: ViewportSize = {"width": 1920, "height": 1080}
+
+
+def new_context(browser: Browser, *, headless: bool) -> BrowserContext:
+    """A browser context sized for the mode: the window's size when headed,
+    HEADLESS_VIEWPORT when headless."""
+    if headless:
+        return browser.new_context(viewport=HEADLESS_VIEWPORT)
+    return browser.new_context(no_viewport=True)
+
+
+@contextmanager
+def open_page(
+    *,
+    headless: bool = False,
+    trace: Path | None = None,
+    channel: str | None = None,
+) -> Iterator[Page]:
+    """Open Chromium and yield a page; close the browser on exit.
+
+    trace: record a Playwright trace (DOM snapshots, screenshots, network) to
+        this .zip, kept even when the run fails. View it with
+        `uv run playwright show-trace <file>`.
+    channel: drive an installed browser instead of Playwright's Chromium,
+        e.g. "chrome" for Google Chrome.
+    """
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            headless=headless,
+            channel=channel,
+            args=[] if headless else HEADED_ARGS,
+        )
+        context = new_context(browser, headless=headless)
+        if trace:
+            context.tracing.start(screenshots=True, snapshots=True, sources=True)
+        try:
+            yield context.new_page()
+        finally:
+            # Close the browser even if saving the trace fails, and let an
+            # error from the run itself take precedence over a trace error.
+            try:
+                if trace:
+                    context.tracing.stop(path=trace)
+            finally:
+                context.close()
+                browser.close()
+
+
+def pause(message: str = "Paused. Press Enter to continue...") -> None:
+    """Wait for Enter, so you can look at the page before the run goes on."""
+    input(message)

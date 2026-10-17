@@ -74,6 +74,19 @@ jobs:
       # (--frozen would install the stale lock and `uv run` would re-lock).
       - name: Install dependencies
         run: uv sync --locked --all-extras
+[%- if flavor == 'browser' %]
+      # Playwright's browser isn't a Python package, so `uv sync` leaves it
+      # out. The cache holds the download (keyed on the lockfile, which pins
+      # the Playwright version); --with-deps still apt-installs the libraries
+      # Chromium needs on each run.
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-locked-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+      - name: Install Playwright's Chromium
+        run: uv run --no-sync playwright install --with-deps chromium
+[%- endif %]
       - name: Test
         run: uv run pytest
 
@@ -90,6 +103,19 @@ jobs:
           python-version: '[[ python_version ]]'
       - name: Install lowest allowed direct dependencies
         run: uv sync --resolution lowest-direct --all-extras
+[%- if flavor == 'browser' %]
+      # Playwright's browser isn't a Python package, so `uv sync` leaves it
+      # out. The cache holds the download (keyed on the lockfile, which pins
+      # the Playwright version); --with-deps still apt-installs the libraries
+      # Chromium needs on each run.
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-lowest-direct-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+      - name: Install Playwright's Chromium
+        run: uv run --no-sync playwright install --with-deps chromium
+[%- endif %]
       # --no-sync: a plain `uv run` would re-lock at the default (highest)
       # resolution and reinstall, testing the newest versions instead.
       - name: Test

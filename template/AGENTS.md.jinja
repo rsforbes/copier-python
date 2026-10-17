@@ -26,6 +26,28 @@ uv add <package>                      # add a dependency (--dev for tooling)
 
 Run tests, format, and lint before finishing a change. Don't edit `uv.lock`
 by hand; use `uv add`, `uv remove`, or `uv lock`.
+[%- if flavor == 'browser' %]
+
+## Browser automation
+
+The project drives Chromium with Playwright; `src/[[ package_name ]]/browser.py`
+has `open_page()` and `pause()`.
+
+```bash
+uv run playwright install --with-deps chromium   # once, if the browser is missing
+uv run pytest --headed --slowmo 500              # watch the browser tests
+uv run playwright show-trace <file.zip>          # replay a recorded run
+```
+
+- Run headless (`headless=True`, `--headless`) yourself; headed runs need a
+  display and are for the developer to watch.
+- Browser tests build their own pages (`page.set_content`); don't make tests
+  depend on a live site.
+- Use Playwright's own sync API from one place per process: pytest-playwright's
+  fixtures hold it during tests, so test CLI runs in a subprocess.
+- Prefer role- and text-based locators (`get_by_role`, `get_by_text`) over CSS
+  selectors, and Playwright's auto-waiting over sleeps.
+[%- endif %]
 
 ## Conventions
 
@@ -39,5 +61,13 @@ by hand; use `uv add`, `uv remove`, or `uv lock`.
 - Don't suppress a security finding (Betterleaks, Semgrep, zizmor, Trivy)
   without confirming it's a false positive; suppress narrowly, with a comment
   saying why (see CONTRIBUTING.md).
+- Configuration and secrets come from environment variables only; locally,
+  the git-ignored `.env` holds them. Never put secrets in other files (no key
+  or credential files), and never read, create, or commit `.env`.
+- `.env.example` lists every environment variable the application reads at
+  run time. When code starts reading a new one, add it there in the same
+  change, with a comment saying what it's for and a placeholder value, never
+  a real one. Development and test switches (e.g. `RUN_INTEGRATION`) don't
+  go in it.
 - `.copier-answers.yml` is managed by Copier; don't edit it. Template updates
   come in with `uvx copier update --trust`.

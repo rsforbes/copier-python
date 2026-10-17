@@ -1,12 +1,12 @@
 # Template CI — generate projects from this template and run their checks, so
 # a template change that breaks new projects fails here first.
 #
-# - `generate`: the generated project's lint, tests, CLI, and pre-commit hooks.
-#   Flavors only differ in the dev container, so this runs on `base` alone.
+# - `generate`: the generated project's lint, tests, CLI, and pre-commit hooks,
+#   for each flavor (the browser flavor adds Playwright, its code, and tests).
 # - `devcontainer`: builds and starts each flavor's dev container with the
 #   devcontainer CLI (features and post-create included), then checks the
-#   tools inside it. This catches breakage in the Dockerfile, e.g. an apt
-#   source or a Chrome download that stopped working.
+#   tools inside it. This catches breakage in the Dockerfile or post-create,
+#   e.g. an apt source or a browser download that stopped working.
 # - `pre-commit`: the template repo's own hooks on its root files.
 # - `betterleaks-pin`: the generated CI's Betterleaks version and checksum,
 #   which Renovate can only half-update.
@@ -26,8 +26,12 @@ permissions:
 
 jobs:
   generate:
-    name: Generate
+    name: Generate (${{ matrix.flavor }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [base, browser]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,14 +39,22 @@ jobs:
           fetch-depth: 0 # Copier reads the template's git history and tags
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Generate project
+        env:
+          FLAVOR: ${{ matrix.flavor }}
         run: |
           uvx copier copy --trust --defaults --vcs-ref HEAD \
-            --data-file .github/ci-answers.yml . "$RUNNER_TEMP/demo-project"
+            --data-file .github/ci-answers.yml -d flavor="$FLAVOR" \
+            . "$RUNNER_TEMP/demo-project"
       - name: Lint
         working-directory: ${{ runner.temp }}/demo-project
         run: |
           uv run --locked ruff format --check .
           uv run --locked ruff check .
+      # As the generated project's own CI does for the browser flavor.
+      - name: Install Playwright's Chromium
+        if: matrix.flavor == 'browser'
+        working-directory: ${{ runner.temp }}/demo-project
+        run: uv run --locked playwright install --with-deps chromium
       - name: Test
         working-directory: ${{ runner.temp }}/demo-project
         run: |
@@ -147,9 +159,10 @@ jobs:
               # the bind mount (created by the uv sync task in copier.yml).
               test "$(uv run --locked python -c "import sys; print(sys.prefix)")" \
                 = "$UV_PROJECT_ENVIRONMENT"
+              # For the browser flavor, this includes tests that launch
+              # Chromium, which post-create installed.
               uv run --locked pytest
               if [ "$FLAVOR" = browser ]; then
-                google-chrome --version
-                xvfb-run -a true
+                uv run --locked playwright --version
               fi
             '

@@ -3,8 +3,14 @@
 import argparse
 import logging
 from collections.abc import Sequence
+[%- if flavor == 'browser' %]
+from pathlib import Path
+[%- endif %]
 
 from [[ package_name ]] import __version__
+[%- if flavor == 'browser' %]
+from [[ package_name ]].browser import open_page, pause
+[%- endif %]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -18,11 +24,42 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="enable debug logging"
     )
+[%- if flavor == 'browser' %]
+    parser.add_argument(
+        "--open", metavar="URL", help="open URL in a browser and print its title"
+    )
+    parser.add_argument(
+        "--headless", action="store_true", help="run the browser without a window"
+    )
+    parser.add_argument(
+        "--pause",
+        action="store_true",
+        help="wait for Enter before closing the browser, to look at the page",
+    )
+    parser.add_argument(
+        "--trace",
+        metavar="FILE",
+        type=Path,
+        help="record a Playwright trace to FILE (view: uv run playwright show-trace)",
+    )
+[%- endif %]
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+[%- if flavor == 'browser' %]
+    if not args.open and (args.headless or args.pause or args.trace):
+        parser.error("--headless, --pause, and --trace need --open URL")
+    if args.open:
+        with open_page(headless=args.headless, trace=args.trace) as page:
+            page.goto(args.open)
+            print(page.title())
+            if args.pause:
+                pause()
+        return 0
+[%- endif %]
     print("Hello from [[ project_name ]]!")
     return 0

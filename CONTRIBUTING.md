@@ -28,6 +28,17 @@ git config core.hooksPath .githooks
   has a matching tag, see `template/.devcontainer/Dockerfile.jinja`), release
   the template, and run `copier update` in each project.
 
+## Claude Code
+
+`.claude/settings.json` here matches `template/.claude/settings.json` (see
+"Claude Code" in `template/CONTRIBUTING.md.jinja` for what it does), except
+for the allowed commands. Keep the two in step. Install the enabled plugin
+once per clone:
+
+```bash
+claude plugin install security-guidance@claude-plugins-official --scope project
+```
+
 ## Trying a change
 
 Generate a project from your working copy. `--vcs-ref HEAD` uses your latest
@@ -103,6 +114,10 @@ The template repo uses the same tooling it gives projects:
 
 1. Add a choice to `flavor` in `copier.yml`.
 2. Guard flavor-specific content in `.jinja` files with
-   `[% if flavor == 'name' %] ... [% endif %]`.
-3. Add the flavor to the `devcontainer` job's matrix in `template-ci.yml`,
-   plus any checks for what it installs.
+   `[% if flavor == 'name' %] ... [% endif %]`. For a file only that flavor
+   gets, put the condition in its name:
+   `[% if flavor == 'name' %]file.py[% endif %]` (an empty name isn't
+   created), plus `.jinja` only if its content uses variables. The `browser`
+   flavor's `browser.py` and `test_browser.py.jinja` work this way.
+3. Add the flavor to the `generate` and `devcontainer` jobs' matrices in
+   `template-ci.yml`, plus any checks for what it installs.

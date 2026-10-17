@@ -12,29 +12,10 @@ FROM mcr.microsoft.com/devcontainers/python:2-${VARIANT}
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # The base image's Yarn apt source (unused here) carries a signing key apt
-# can't verify, so `apt-get update` fails. Drop it in every flavor, before
-# anything (this file, or a dev container feature) needs apt.
+# can't verify, so `apt-get update` fails. Drop it before anything needs apt: a
+# dev container feature, or Playwright installing its browser's libraries in
+# post_create_command.sh.
 RUN rm -f /etc/apt/sources.list.d/yarn.list
-[%- if flavor == 'browser' %]
-
-# Browser stack for driving a real Chrome (nodriver, Playwright, Selenium):
-# - google-chrome-stable: branded Chrome. Sites behind bot protection (e.g.
-#   Cloudflare) tend to detect unbranded Chromium and never clear the challenge.
-# - xvfb: virtual display. This container has no screen, and bot challenges are
-#   not reliably solved headless, so run browser code under `xvfb-run -a`.
-# Google ships Linux Chrome for amd64 only; on other architectures (e.g. arm64
-# on Apple Silicon) Chrome is skipped so the container still builds.
-RUN CHROME_DEB="" \
-    && if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
-        curl -fsSLo /tmp/chrome.deb \
-            https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-        && CHROME_DEB=/tmp/chrome.deb; \
-    fi \
-    && apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        $CHROME_DEB xvfb xauth \
-    && rm -rf /tmp/chrome.deb /var/lib/apt/lists/*
-[%- endif %]
 
 # Switch from root to the vscode user for security and proper file permissions
 # The vscode user is pre-configured in the base image with development tools

@@ -60,7 +60,7 @@ flavor:
   help: Flavor
   choices:
     "base    - plain Python project": base
-    "browser - base + Google Chrome and xvfb in the dev container (nodriver, Playwright, Selenium)": browser
+    "browser - base + Playwright browser automation (Chromium, example code, tests)": browser
   default: base
 
 # No defaults, so the template carries no personal details. To avoid retyping
@@ -114,6 +114,9 @@ _message_after_copy: |
   Next:
     cd [[ _copier_conf.dst_path ]]
     git config core.hooksPath .githooks   # or open the folder in the dev container
+  [%- if flavor == 'browser' %]
+    uv run playwright install --with-deps chromium   # the dev container does this
+  [%- endif %]
     uv run pytest
 
   Before pushing to GitHub, read "First push" in the new project's README.md.
