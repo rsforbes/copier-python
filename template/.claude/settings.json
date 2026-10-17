@@ -1,6 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "includeCoAuthoredBy": false,
+  "env": {
+    "DISABLE_TELEMETRY": "1",
+    "DISABLE_ERROR_REPORTING": "1"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "permissions": {
     "allow": [
       "Bash(uv run pytest:*)",
@@ -10,13 +17,63 @@
       "Bash(uv lock:*)"
     ],
     "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./secrets/**)"
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.env)",
+      "Read(**/.envrc)",
+      "Read(**/secrets/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.config/gcloud/**)",
+      "Read(~/.azure/**)",
+      "Read(~/.netrc)",
+      "Read(~/.pypirc)",
+      "Read(~/.docker/config.json)",
+      "Read(!**/.env.example)"
     ],
     "ask": [
-      "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git commit *)",
+      "Bash(git * commit)",
+      "Bash(git * commit *)",
+      "Bash(git push *)",
+      "Bash(git * push)",
+      "Bash(git * push *)",
+      "Bash(git reset --hard *)",
+      "Bash(git * reset --hard)",
+      "Bash(git * reset --hard *)",
+      "Bash(git clean *)",
+      "Bash(git * clean)",
+      "Bash(git * clean *)",
+      "Bash(git checkout *)",
+      "Bash(git * checkout)",
+      "Bash(git * checkout *)",
+      "Bash(git restore *)",
+      "Bash(git * restore)",
+      "Bash(git * restore *)",
+      "Bash(git branch -D *)",
+      "Bash(git * branch -D)",
+      "Bash(git * branch -D *)",
+      "Bash(git stash drop *)",
+      "Bash(git * stash drop)",
+      "Bash(git * stash drop *)",
+      "Bash(git stash clear *)",
+      "Bash(git * stash clear)",
+      "Bash(git * stash clear *)",
+      "Bash(git rebase *)",
+      "Bash(git * rebase)",
+      "Bash(git * rebase *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh pr close *)",
+      "Bash(gh release create *)",
+      "Bash(gh release delete *)",
+      "Bash(gh repo delete *)",
+      "mcp__github__create_pull_request",
+      "mcp__github__merge_pull_request"
     ]
+  },
+  "enabledPlugins": {
+    "security-guidance@claude-plugins-official": true
   }
 }

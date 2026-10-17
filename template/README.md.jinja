@@ -10,6 +10,7 @@ everything installed).
 ```bash
 uv sync                                # create .venv with all dependencies
 git config core.hooksPath .githooks    # enable the pre-commit hooks (the dev container does this)
+cp .env.example .env                   # fill in real values (never committed); load with uv run --env-file .env
 uv run [[ project_name ]] --help
 ```
 
@@ -24,16 +25,32 @@ tooling); both update `pyproject.toml` and `uv.lock`.
 
 ### Browser automation
 
-The dev container includes Google Chrome and `xvfb`. The container has no
-screen, so run browser code under a virtual display:
+The project drives Chromium with [Playwright](https://playwright.dev/python/).
+The dev container installs Playwright's Chromium for you; elsewhere, run
+`uv run playwright install --with-deps chromium` once after `uv sync`.
+
+Work out a flow headed, watching the browser, then run it headless once it
+works:
 
 ```bash
-xvfb-run -a uv run python your_script.py
+uv run [[ project_name ]] --open https://example.com --pause      # headed; Enter to close
+uv run [[ project_name ]] --open https://example.com --headless   # no window
+uv run [[ project_name ]] --open https://example.com --trace run.zip
+uv run playwright show-trace run.zip                              # replay a run, step by step
 ```
 
-Prefer branded Chrome over unbranded Chromium: sites behind bot protection
-(e.g. Cloudflare) tend to detect Chromium. Chrome is installed only on amd64
-hosts; on arm64 (e.g. Apple Silicon) the container builds without it.
+`src/[[ package_name ]]/browser.py` has the pieces to build on: `open_page()`
+(headed by default, sized for each mode, with optional tracing) and `pause()`
+to stop and look. For Playwright's own debugger, call `page.pause()`: it opens
+the Inspector, where you step through the run and try out selectors. To
+record a flow as code, run `uv run playwright codegen <url>`.
+
+Browser tests use pytest-playwright's `page` fixture (`tests/unit/test_browser.py`).
+They run headless; watch one with `uv run pytest --headed --slowmo 500`.
+
+Headed runs need a display from your machine. On Windows, WSLg provides one,
+including inside the dev container. To drive an installed Google Chrome instead
+of Playwright's Chromium, pass `channel="chrome"` to `open_page()`.
 [%- endif %]
 
 ## Development
@@ -49,6 +66,11 @@ uv run pre-commit run --all-files      # secrets, SAST, workflow lint/audit
 Pull request titles must follow
 [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/); they
 drive versioning and the changelog. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Coding agents follow [AGENTS.md](AGENTS.md). Claude Code also uses the shared
+settings in `.claude/settings.json`: it can't read `.env` or credential files,
+and asks before committing, pushing, or opening a PR (see "Claude Code" in
+CONTRIBUTING.md).
 
 ## First push
 

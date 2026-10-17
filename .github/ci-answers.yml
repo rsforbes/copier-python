@@ -1,5 +1,5 @@
 # Answers Template CI passes to Copier (--data-file) for the questions without
-# defaults. The devcontainer job sets the flavor from its matrix.
+# defaults. The generate and devcontainer jobs set the flavor from their matrices.
 project_name: demo-project
 description: Template CI
 author_name: Template CI

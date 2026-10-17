@@ -69,6 +69,36 @@ possible, with a comment saying why:
 | zizmor      | a `# zizmor: ignore[<audit>]` comment on the flagged line                            |
 | Trivy       | add the vulnerability ID to a `.trivyignore` file (prefer upgrading the package)     |
 
+## Claude Code
+
+[`.claude/settings.json`](.claude/settings.json) is shared project settings
+for [Claude Code](https://code.claude.com/docs):
+
+- Telemetry and error reporting are off.
+- No Claude attribution (`Co-Authored-By`, "Generated with Claude Code") in
+  commits or pull requests.
+- Claude can't read env files (`.env`, `.env.*`, `*.env`, `.envrc`) or
+  `secrets/`; `.env.example`, the committed list of variables, stays
+  readable. This covers Claude's file tools and simple shell reads like
+  `cat .env`, not a program Claude runs that opens the file itself.
+- Claude can't read credential files in your home folder: SSH keys, the
+  GitHub CLI token, AWS/Google Cloud/Azure credentials, `.netrc`, `.pypirc`,
+  and Docker's `config.json`.
+- Claude always asks before committing, pushing, creating, merging, or
+  closing a pull request, creating or deleting a release or repository, and
+  before git commands that discard work (`reset --hard`, `clean`, `checkout`,
+  `restore`, `branch -D`, `stash drop`/`clear`, `rebase`), even in auto mode.
+- The `security-guidance` plugin is enabled. The dev container installs it;
+  elsewhere, install it once with
+  `claude plugin install security-guidance@claude-plugins-official --scope project`.
+
+These guard against Claude being over-eager, not against deliberate misuse:
+a program Claude runs can still read files, and `gh api` isn't restricted.
+
+Personal overrides go in `.claude/settings.local.json` (git-ignored). Its
+permission rules add to the deny and ask rules above but can't lift them;
+its other settings (`env`, `attribution`, `enabledPlugins`) override these.
+
 ## Pull request titles
 
 This repository **squash-merges** pull requests, so the **PR title becomes the
