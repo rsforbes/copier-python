@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/rsforbes/python-template/compare/v0.3.0...v0.3.1) (2026-10-19)
+
+
+### Continuous Integration
+
+* **deps:** update github actions ([8727b78](https://github.com/rsforbes/python-template/commit/8727b78765b7daadf0f9388591395ae42c7ab561))
+
 ## [0.3.0](https://github.com/rsforbes/python-template/compare/v0.2.0...v0.3.0) (2026-10-17)
 
 
