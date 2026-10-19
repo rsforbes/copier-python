@@ -48,19 +48,9 @@ For root files, run this repo's hooks:
   documentation: `feat` for something new in projects, `fix` for a
   correction, `build`/`ci` for dependency and workflow changes. Use `docs`,
   `chore`, `refactor`, `style`, or `test` only for changes outside
-  `template/`; they don't cut a release.
+  `template/`; they don't cut a release. The PR Title check fails a PR that
+  changes `template/` under one of those types; fix the title, not the check.
 - Squash merges use the PR title as the commit subject and an empty body. To
   add a footer (`Release-As: X.Y.Z`, or a `BREAKING CHANGE:` explanation),
   pass it at merge time with `gh pr merge <n> --squash --body "..."`; footers
   in the PR description don't carry over.
-- A PR merged with the wrong type (e.g. `docs:` for a change under
-  `template/`): add this to the merged PR's description, then run the Release
-  workflow (or wait for the next push to main). Release-please uses it in
-  place of the commit message, for the version bump and the changelog. It only
-  works until that change is released.
-
-  ```
-  BEGIN_COMMIT_OVERRIDE
-  feat: <corrected title>
-  END_COMMIT_OVERRIDE
-  ```
