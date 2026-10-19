@@ -100,7 +100,9 @@ The template repo uses the same tooling it gives projects:
   release's `checksums.txt`) to the PR branch; the `betterleaks-pin` job fails
   until you do. Renovate runs as the
   [Renovate GitHub App](https://github.com/apps/renovate), installed on this
-  repository.
+  repository. Its Dependency Dashboard (an issue it keeps open) lists what's
+  tracked and what's waiting out the 7-day delay; don't tick a pending
+  update's checkbox to hurry it, since that skips the delay.
 - **Releases** (`.github/workflows/release.yml`): release-please keeps a
   release PR open; merging it tags the next version and writes `CHANGELOG.md`.
   `feat` bumps the minor version; `fix`, `perf`, `build`, and `ci` the patch.
