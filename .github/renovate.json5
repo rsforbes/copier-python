@@ -97,6 +97,21 @@
 
   packageRules: [
     {
+      // config:recommended's :semanticPrefixFixDepsChoreOthers sets "chore"
+      // for every package in a packageRule, which beats the top-level
+      // semanticCommitType; "chore" doesn't cut a template release.
+      matchPackageNames: ["*"],
+      semanticCommitType: "ci",
+    },
+    {
+      // Renovate fills ${VARIANT} in from `ARG VARIANT="[[ python_version
+      // ]]-trixie"`, so the tag it sees is Jinja, not a real one. The image
+      // follows python_version anyway.
+      matchManagers: ["dockerfile"],
+      matchFileNames: ["template/.devcontainer/Dockerfile.jinja"],
+      enabled: false,
+    },
+    {
       matchManagers: ["github-actions"],
       groupName: "GitHub Actions",
     },
