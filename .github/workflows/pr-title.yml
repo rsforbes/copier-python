@@ -5,7 +5,8 @@
 # commit messages are collapsed at squash and are intentionally not policed.
 #
 # Runs as `pull_request_target` so it also validates forked / Dependabot PRs;
-# it only reads the title and never checks out PR code, so this is safe.
+# it only reads the title and the changed-file list and never checks out PR
+# code, so this is safe.
 name: PR Title
 on: # zizmor: ignore[dangerous-triggers] -- only reads the PR title; never checks out PR code
   pull_request_target:
@@ -20,3 +21,27 @@ jobs:
       - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # `copier update` only reaches projects through a release, so a change
+      # under template/ merged as docs/chore/... would never ship. Catching it
+      # here is what keeps the release PR right without anyone fixing types
+      # after the fact.
+      - name: Require a releasable type for template changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          type="${TITLE%%[(:!]*}"
+          case "$type" in
+            docs|chore|refactor|style|test) ;;
+            *) exit 0 ;;
+          esac
+          template_files="$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" \
+            --jq '.[].filename | select(startswith("template/"))')"
+          if [ -n "$template_files" ]; then
+            echo "::error::'$type' doesn't cut a release, but this PR changes template/:"
+            echo "$template_files"
+            echo "Use feat, fix, build, or ci instead (see AGENTS.md)."
+            exit 1
+          fi
