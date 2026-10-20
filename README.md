@@ -59,8 +59,7 @@ improves, `copier update` brings the changes into your existing projects.
   the project works: its commands and rules, read by Claude Code and other
   agents. Claude Code settings (`.claude/settings.json`) keep an over-eager
   agent in check:
-  - telemetry and error reporting off, and commits and PRs credited to you
-    alone;
+  - error reporting off, and commits and PRs credited to you alone;
   - `.env` files and the credential files in your home folder (SSH, GitHub
     CLI, cloud, `.netrc`, `.pypirc`, Docker) kept off-limits;
   - a prompt before every commit, push, PR create/merge/close, release or
