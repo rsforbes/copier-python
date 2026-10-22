@@ -74,7 +74,9 @@ possible, with a comment saying why:
 [`.claude/settings.json`](.claude/settings.json) is shared project settings
 for [Claude Code](https://code.claude.com/docs):
 
-- Telemetry and error reporting are off.
+- Error reporting is off. Telemetry stays on: turning it off also stops
+  Claude Code fetching feature flags, which disables features such as
+  Remote Control and artifact comments.
 - No Claude attribution (`Co-Authored-By`, "Generated with Claude Code") in
   commits or pull requests.
 - Claude can't read env files (`.env`, `.env.*`, `*.env`, `.envrc`) or
