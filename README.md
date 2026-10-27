@@ -10,11 +10,10 @@ Pick the `browser` add-on for Playwright, set up and tested. When the template
 improves, `copier update` brings the changes into your existing projects.
 
 ```bash
-uvx copier copy --trust gh:<owner>/python-template ~/projects/my-project
+uvx copier copy --trust gh:rsforbes/python-template ~/projects/my-project
 ```
 
-Replace `<owner>` with the GitHub user or organization hosting this template,
-answer a few questions, and start coding. All you need is git and
+Answer a few questions and start coding. All you need is git and
 [uv](https://docs.astral.sh/uv/getting-started/installation/); see
 [Getting started](#getting-started) for the questions and options.
 
@@ -153,10 +152,11 @@ defaults:
   author_name: Your Name
   author_email: you@example.com
   github_owner: your-github-user
-# Templates allowed to run tasks without --trust. A URL ending in "/" trusts
-# everything under it; a local path must match exactly, as an absolute path.
+# Templates allowed to run tasks without --trust. An entry ending in "/"
+# trusts everything under it; anything else must match exactly (a local path
+# as an absolute path).
 trust:
-  - gh:your-github-user/
+  - gh:rsforbes/python-template
 ```
 
 They become the suggested answers; you just press Enter.
