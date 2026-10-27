@@ -17,7 +17,9 @@
 # - `betterleaks` scans the full git history for secrets (the local hook only
 #   sees staged changes).
 # - `trivy` scans uv.lock for vulnerable dependencies and the Dockerfile for
-#   misconfigurations (config in trivy.yaml).
+#   misconfigurations (config in trivy.yaml). On a pull request it fails only
+#   on findings the base branch lacks, so a newly published advisory doesn't
+#   fail every open PR at once.
 # Trivy and Semgrep also run weekly and on every push to main (security.yml),
 # which uploads their findings to the Security tab and opens an issue when a
 # run fails.
@@ -191,10 +193,17 @@ jobs:
   trivy:
     name: Vulnerabilities (Trivy)
     runs-on: ubuntu-latest
+    env:
+      # One database for both scans: the action is handed this path as its
+      # cache-dir, and the base scan reads it through the variable.
+      TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # A PR checks out its merge commit; depth 2 brings the first parent,
+          # the base it merges into, which the gate scans as its baseline.
+          fetch-depth: 2
       - name: Scan dependencies and Dockerfile
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -202,6 +211,70 @@ jobs:
           scan-ref: .
           trivy-config: trivy.yaml
           version: v0.75.0
+          cache-dir: ${{ env.TRIVY_CACHE_DIR }}
+          format: json
+          output: trivy-results.json
+          # The next step decides which findings fail the job.
+          exit-code: '0'
+      # Trivy's advisory database moves independently of the code: an advisory
+      # published against a lockfile nobody touched would turn every open PR
+      # red at once. So a PR fails only on findings its base lacks, matched by
+      # file, package and advisory (or misconfiguration check), and the findings
+      # the base already had surface as warnings. The version is not part of the
+      # match: a package moved to another version the same advisory covers was
+      # exposed to it before the PR too.
+      #
+      # The base is scanned with its own trivy.yaml and .trivyignore, so a PR
+      # that widens the policy fails on what that uncovers; one that narrows it
+      # passes, and that change shows only in the diff.
+      #
+      # A manual run has no baseline and fails on every finding, as do the
+      # weekly and push-to-main scans in security.yml, so a new advisory still
+      # turns main red without blocking unrelated PRs.
+      - name: Gate on findings the change introduces
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          count='[.Results[]? | (.Vulnerabilities[]?, .Misconfigurations[]?)] | length'
+          if [ "$(jq "$count" trivy-results.json)" -eq 0 ]; then
+            echo "No finding under the policy in trivy.yaml."
+            exit 0
+          fi
+
+          if [ "$EVENT" = "pull_request" ]; then
+            git worktree add --detach "$RUNNER_TEMP/base" HEAD^1
+            # The database and checks the first scan downloaded, unchanged, so
+            # both reports describe the same set of advisories.
+            (cd "$RUNNER_TEMP/base" && trivy fs --skip-db-update --skip-check-update \
+              --format json --output "$GITHUB_WORKSPACE/trivy-base.json" --exit-code 0 .)
+          else
+            echo '{}' > trivy-base.json
+          fi
+
+          # Splits each file's findings into those the base already had, counted
+          # for the warnings, and the rest, which stay in the report.
+          jq --slurpfile base trivy-base.json '
+            def key($t): "\($t)|\(.PkgName // "")|\(.VulnerabilityID // .ID)";
+            def drop_known($t; $old): if . then map(select($old[key($t)] | not)) else . end;
+            (reduce ($base[0].Results[]? | .Target as $t
+                | (.Vulnerabilities[]?, .Misconfigurations[]?) | key($t))
+              as $k ({}; .[$k] = true)) as $old
+            | .Baseline = [.Results[]? | .Target as $t
+                | {Target: $t, Count: ([(.Vulnerabilities[]?, .Misconfigurations[]?)
+                    | select($old[key($t)])] | length)}
+                | select(.Count > 0)]
+            | .Results |= [.[]? | .Target as $t
+                | .Vulnerabilities |= drop_known($t; $old)
+                | .Misconfigurations |= drop_known($t; $old)]
+          ' trivy-results.json > trivy-gated.json
+
+          jq -r '.Baseline[] | "::warning title=Trivy::\(.Target) carries \(.Count) findings its base already had"' trivy-gated.json
+
+          if [ "$(jq "$count" trivy-gated.json)" -gt 0 ]; then
+            trivy convert --format table trivy-gated.json
+            exit 1
+          fi
+          echo "No finding under the policy in trivy.yaml that the base lacks."
 
   # Aggregate gate for branch protection. Passes when every job succeeded or was
   # skipped; fails otherwise. Set this ("CI") as the required status check.

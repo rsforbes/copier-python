@@ -1,6 +1,8 @@
 # Trivy configuration — read automatically by `trivy fs .` run from the repo
 # root, and passed to the CI and weekly scans (.github/workflows/ci.yml and
-# security.yml), so local and CI scans agree.
+# security.yml), so local and CI scans agree. A pull request's scan of its base
+# reads the base's copy, so a PR that loosens this file passes on what it
+# hides: review its diff.
 #
 # Scans uv.lock for known-vulnerable dependencies and the dev container
 # Dockerfile for misconfigurations. Dev dependencies (pytest, pre-commit, ...)

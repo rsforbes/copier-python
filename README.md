@@ -28,8 +28,9 @@ improves, `copier update` brings the changes into your existing projects.
   ([actionlint](https://github.com/rhysd/actionlint),
   [zizmor](https://docs.zizmor.sh/)), and CI runs the same checks (GitHub
   Actions). CI also scans the full git history for secrets and checks
-  dependencies for known vulnerabilities ([Trivy](https://trivy.dev/)); Trivy
-  and Semgrep re-run weekly to catch newly published CVEs and new rules.
+  dependencies for known vulnerabilities ([Trivy](https://trivy.dev/)),
+  failing a pull request only on the ones it introduces; Trivy and Semgrep
+  re-run weekly to catch newly published CVEs and new rules.
   Every GitHub Action and hook is pinned to a commit SHA, and dependency
   updates wait 7 days after a release
   ([Dependabot](https://docs.github.com/code-security/dependabot) cooldown),
