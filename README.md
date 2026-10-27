@@ -1,4 +1,4 @@
-# python-template
+# copier-python
 
 Go from zero to a working, secure Python project in one command, fully set
 up and ready to code. One [Copier](https://copier.readthedocs.io/)
@@ -10,7 +10,7 @@ Pick the `browser` add-on for Playwright, set up and tested. When the template
 improves, `copier update` brings the changes into your existing projects.
 
 ```bash
-uvx copier copy --trust gh:rsforbes/python-template ~/projects/my-project
+uvx copier copy --trust gh:rsforbes/copier-python ~/projects/my-project
 ```
 
 Answer a few questions and start coding. All you need is git and
@@ -157,7 +157,7 @@ defaults:
 # trusts everything under it; anything else must match exactly (a local path
 # as an absolute path).
 trust:
-  - gh:rsforbes/python-template
+  - gh:rsforbes/copier-python
 ```
 
 They become the suggested answers; you just press Enter.
