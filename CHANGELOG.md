@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.2](https://github.com/rsforbes/copier-python/compare/v0.3.1...v0.3.2) (2026-10-28)
+
+
+### Bug Fixes
+
+* keep Claude Code telemetry on so feature-flag features work ([#16](https://github.com/rsforbes/copier-python/issues/16)) ([bd188d2](https://github.com/rsforbes/copier-python/commit/bd188d279ab5e7add3221138b8ea56c961ce7a03))
+* rename the template to copier-python ([#23](https://github.com/rsforbes/copier-python/issues/23)) ([394527d](https://github.com/rsforbes/copier-python/commit/394527db006bdf80b5a40101558d8e2187185695))
+
+
+### Continuous Integration
+
+* **deps:** update dependency aquasecurity/trivy to v0.76.0 ([#18](https://github.com/rsforbes/copier-python/issues/18)) ([5493a45](https://github.com/rsforbes/copier-python/commit/5493a4571f73f947a97a66673fdd488971f78dff))
+* **deps:** update github actions ([#19](https://github.com/rsforbes/copier-python/issues/19)) ([3742b27](https://github.com/rsforbes/copier-python/commit/3742b275cdf5be97c12997de25dff04b5eba7a84))
+* **deps:** update pre-commit hooks ([#20](https://github.com/rsforbes/copier-python/issues/20)) ([06a0f78](https://github.com/rsforbes/copier-python/commit/06a0f78ed1971be9bc5d920973ddfefe19fafed4))
+* fail a PR's Trivy scan only on findings it introduces ([#22](https://github.com/rsforbes/copier-python/issues/22)) ([7de9741](https://github.com/rsforbes/copier-python/commit/7de974182472cdb49a00b13b54c117723515b0a9))
+
 ## [0.3.1](https://github.com/rsforbes/python-template/compare/v0.3.0...v0.3.1) (2026-10-19)
 
 
