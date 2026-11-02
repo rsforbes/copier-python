@@ -1,3 +1,4 @@
+[% from 'partials/ci.jinja' import betterleaks_check, betterleaks_install, trivy_gate -%]
 # CI — lint, run the test suite, guard the declared dependency floor, and run
 # the security scans. The Azure Pipelines counterpart of a GitHub project's
 # ci.yml and security.yml, with the same jobs and rules.
@@ -201,20 +202,9 @@ jobs:
     steps:
       - checkout: self
         fetchDepth: '0' # full history: a secret removed in a later commit is still leaked
-      - script: |
-          set -eu
-          if ! grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
-              | grep -q "# frozen: v${BETTERLEAKS_VERSION//./\\.}\$"; then
-            echo "##vso[task.logissue type=error]BETTERLEAKS_VERSION (${BETTERLEAKS_VERSION}) does not match the betterleaks rev in .pre-commit-config.yaml; bump BETTERLEAKS_VERSION and BETTERLEAKS_SHA256"
-            exit 1
-          fi
+      - script: |[[- betterleaks_check(error='##vso[task.logissue type=error]') ]]
         displayName: Check version matches the pre-commit hook
-      - script: |
-          set -eu
-          tarball="betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -fsSLO "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/${tarball}"
-          echo "${BETTERLEAKS_SHA256}  ${tarball}" | sha256sum -c -
-          tar -xzf "$tarball" betterleaks
+      - script: |[[- betterleaks_install() ]]
         displayName: Install Betterleaks
       - script: ./betterleaks git --redact --verbose --no-banner .
         displayName: Scan git history
@@ -257,50 +247,5 @@ jobs:
       #
       # Runs on main (pushes, the weekly schedule, manual runs) have no
       # baseline and fail on every finding.
-      - script: |
-          set -eu
-          count='[.Results[]? | (.Vulnerabilities[]?, .Misconfigurations[]?)] | length'
-          if [ "$(jq "$count" trivy-results.json)" -eq 0 ]; then
-            echo "No finding under the policy in trivy.yaml."
-            exit 0
-          fi
-
-          if [ "$BUILD_REASON" = "PullRequest" ]; then
-            # Azure empties the temp directory after each job, but a
-            # self-hosted agent keeps .git between runs, and with it the last
-            # run's worktree entry; prune it, or `add` refuses the path.
-            git worktree prune
-            git worktree add --detach "$AGENT_TEMPDIRECTORY/base" HEAD^1
-            # The database and checks the first scan downloaded, unchanged, so
-            # both reports describe the same set of advisories.
-            (cd "$AGENT_TEMPDIRECTORY/base" && trivy fs --skip-db-update --skip-check-update \
-              --format json --output "$BUILD_SOURCESDIRECTORY/trivy-base.json" --exit-code 0 .)
-          else
-            echo '{}' > trivy-base.json
-          fi
-
-          # Splits each file's findings into those the base already had, counted
-          # for the warnings, and the rest, which stay in the report.
-          jq --slurpfile base trivy-base.json '
-            def key($t): "\($t)|\(.PkgName // "")|\(.VulnerabilityID // .ID)";
-            def drop_known($t; $old): if . then map(select($old[key($t)] | not)) else . end;
-            (reduce ($base[0].Results[]? | .Target as $t
-                | (.Vulnerabilities[]?, .Misconfigurations[]?) | key($t))
-              as $k ({}; .[$k] = true)) as $old
-            | .Baseline = [.Results[]? | .Target as $t
-                | {Target: $t, Count: ([(.Vulnerabilities[]?, .Misconfigurations[]?)
-                    | select($old[key($t)])] | length)}
-                | select(.Count > 0)]
-            | .Results |= [.[]? | .Target as $t
-                | .Vulnerabilities |= drop_known($t; $old)
-                | .Misconfigurations |= drop_known($t; $old)]
-          ' trivy-results.json > trivy-gated.json
-
-          jq -r '.Baseline[] | "##vso[task.logissue type=warning]Trivy: \(.Target) carries \(.Count) findings its target branch already had"' trivy-gated.json
-
-          if [ "$(jq "$count" trivy-gated.json)" -gt 0 ]; then
-            trivy convert --format table trivy-gated.json
-            exit 1
-          fi
-          echo "No finding under the policy in trivy.yaml that the target branch lacks."
+      - script: |[[- trivy_gate(is_pr='[ "$BUILD_REASON" = "PullRequest" ]', tmp='$AGENT_TEMPDIRECTORY', warning='##vso[task.logissue type=warning]Trivy: ') ]]
         displayName: Gate on findings the change introduces

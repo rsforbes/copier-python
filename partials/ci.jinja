@@ -1,0 +1,88 @@
+[#
+  CI steps both platforms' generated CI share: ci.yml.jinja (GitHub) and
+  azure-pipelines.yml.jinja (Azure DevOps) import these macros, so a fix lands
+  in both. Copier loads templates from the repo root, so this file is
+  importable but, being outside template/, never copied into projects.
+
+  Each macro renders a step's script body, indented to sit under a `run: |` or
+  `- script: |` key at the indentation both files use. The arguments carry
+  what differs between the platforms.
+#]
+
+[#-
+  Fails when BETTERLEAKS_VERSION doesn't match the betterleaks hook rev.
+  error: the prefix that makes a log line an error annotation.
+#]
+[%- macro betterleaks_check(error) %]
+          set -eu
+          if ! grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
+              | grep -q "# frozen: v${BETTERLEAKS_VERSION//./\\.}\$"; then
+            echo "[[ error ]]BETTERLEAKS_VERSION (${BETTERLEAKS_VERSION}) does not match the betterleaks rev in .pre-commit-config.yaml; bump BETTERLEAKS_VERSION and BETTERLEAKS_SHA256"
+            exit 1
+          fi
+[%- endmacro %]
+
+[#- Downloads Betterleaks and checks it against BETTERLEAKS_SHA256. #]
+[%- macro betterleaks_install() %]
+          set -eu
+          tarball="betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/${tarball}"
+          echo "${BETTERLEAKS_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" betterleaks
+[%- endmacro %]
+
+[#-
+  Fails on Trivy findings in trivy-results.json; on a pull request, only on
+  those its base branch lacks (HEAD^1 of the merge commit).
+  is_pr: a shell test that is true on a pull request.
+  tmp: a temporary directory for the base branch's worktree.
+  warning: the prefix that makes a log line a warning annotation.
+#]
+[%- macro trivy_gate(is_pr, tmp, warning) %]
+          set -eu
+          count='[.Results[]? | (.Vulnerabilities[]?, .Misconfigurations[]?)] | length'
+          if [ "$(jq "$count" trivy-results.json)" -eq 0 ]; then
+            echo "No finding under the policy in trivy.yaml."
+            exit 0
+          fi
+
+          if [[ is_pr ]]; then
+            # A self-hosted runner or agent keeps .git between runs, and with
+            # it the last run's worktree entry once the temp directory is
+            # emptied; prune it, or `add` refuses the path.
+            git worktree prune
+            git worktree add --detach "[[ tmp ]]/base" HEAD^1
+            # The database and checks the first scan downloaded, unchanged, so
+            # both reports describe the same set of advisories.
+            root="$PWD"
+            (cd "[[ tmp ]]/base" && trivy fs --skip-db-update --skip-check-update \
+              --format json --output "$root/trivy-base.json" --exit-code 0 .)
+          else
+            echo '{}' > trivy-base.json
+          fi
+
+          # Splits each file's findings into those the base already had, counted
+          # for the warnings, and the rest, which stay in the report.
+          jq --slurpfile base trivy-base.json '
+            def key($t): "\($t)|\(.PkgName // "")|\(.VulnerabilityID // .ID)";
+            def drop_known($t; $old): if . then map(select($old[key($t)] | not)) else . end;
+            (reduce ($base[0].Results[]? | .Target as $t
+                | (.Vulnerabilities[]?, .Misconfigurations[]?) | key($t))
+              as $k ({}; .[$k] = true)) as $old
+            | .Baseline = [.Results[]? | .Target as $t
+                | {Target: $t, Count: ([(.Vulnerabilities[]?, .Misconfigurations[]?)
+                    | select($old[key($t)])] | length)}
+                | select(.Count > 0)]
+            | .Results |= [.[]? | .Target as $t
+                | .Vulnerabilities |= drop_known($t; $old)
+                | .Misconfigurations |= drop_known($t; $old)]
+          ' trivy-results.json > trivy-gated.json
+
+          jq -r '.Baseline[] | "[[ warning ]]\(.Target) carries \(.Count) findings its base branch already had"' trivy-gated.json
+
+          if [ "$(jq "$count" trivy-gated.json)" -gt 0 ]; then
+            trivy convert --format table trivy-gated.json
+            exit 1
+          fi
+          echo "No finding under the policy in trivy.yaml that the base branch lacks."
+[%- endmacro %]
