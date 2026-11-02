@@ -35,9 +35,6 @@
     // template/; add the rendered workflows.
     managerFilePatterns: ["/^template/\\.github/workflows/[^/]+\\.ya?ml\\.jinja$/"],
   },
-  devcontainer: {
-    managerFilePatterns: ["/^template/\\.devcontainer/devcontainer\\.json\\.jinja$/"],
-  },
 
   customManagers: [
     {
@@ -108,6 +105,17 @@
       ],
       depNameTemplate: "aquasecurity/trivy",
       datasourceTemplate: "github-tags",
+    },
+    {
+      // Dev container features. A regex rather than Renovate's devcontainer
+      // manager, which parses the file as JSONC: the `platform` blocks around
+      // the CLI features make devcontainer.json.jinja unparseable, and the
+      // manager would then skip the file without an error.
+      customType: "regex",
+      description: "Dev container features",
+      managerFilePatterns: ["/^template/\\.devcontainer/devcontainer\\.json\\.jinja$/"],
+      matchStrings: ['"(?<depName>ghcr\\.io/devcontainers/features/[^":]+):(?<currentValue>[^"]+)"'],
+      datasourceTemplate: "docker",
     },
     {
       // The devcontainer CLI Template CI builds containers with.

@@ -118,7 +118,8 @@ for [Claude Code](https://code.claude.com/docs):
   `claude plugin install security-guidance@claude-plugins-official --scope project`.
 
 These guard against Claude being over-eager, not against deliberate misuse:
-a program Claude runs can still read files, and `gh api` isn't restricted.
+a program Claude runs can still read files, and
+[% if platform == 'github' %]`gh api`[% else %]`az devops invoke`[% endif %] isn't restricted.
 
 Personal overrides go in `.claude/settings.local.json` (git-ignored). Its
 permission rules add to the deny and ask rules above but can't lift them;
@@ -234,14 +235,14 @@ Write the title (and description) as the changelog line a user should read.
 
 Releases are made by hand, in a pull request of their own:
 
-1. List the titles merged since the last release
+1. Run `git fetch origin`, list the titles merged since the last release
    (`git log --oneline v<last>..origin/main`, or everything for the first
-   release) and pick the bump from the table above.
+   release), and pick the bump from the table above.
 2. Run `uv version --bump major|minor|patch`, which updates `pyproject.toml`
    and `uv.lock`.
 3. Add a `## [X.Y.Z] - YYYY-MM-DD` section to the top of `CHANGELOG.md`
    with the titles under the sections above.
 4. Open a pull request titled `chore: release X.Y.Z`, and merge it.
-5. Tag the merge commit and push the tag:
-   `git tag vX.Y.Z origin/main && git push origin vX.Y.Z`.
+5. Fetch the merge commit, then tag it and push the tag:
+   `git fetch origin && git tag vX.Y.Z origin/main && git push origin vX.Y.Z`.
 [%- endif %]

@@ -68,10 +68,26 @@ variables:
   # environment variables, and pipeline variables become environment
   # variables.)
   uvRelease: 0.13.5
-  # Where the installer puts uv. Not ~/.local/bin, which a self-hosted agent
-  # shares with whatever else its user installed.
-  UV_INSTALL_DIR: $(Agent.ToolsDirectory)/uv/$(uvRelease)
-  UV_NO_MODIFY_PATH: '1'
+[#- The uv install every job but the scanners starts with, defined once. #]
+[%- macro install_uv() %]
+      # The release archive from GitHub, checked against the release's
+      # checksum (not astral.sh's install script, which is served unpinned).
+      # x86_64, like the Microsoft-hosted agents. Unpacked under the agent's
+      # tools directory rather than ~/.local/bin, which a self-hosted agent
+      # shares with whatever else its user installed.
+      - script: |
+          set -euo pipefail
+          dir="$(Agent.ToolsDirectory)/uv/$(uvRelease)"
+          tarball=uv-x86_64-unknown-linux-gnu.tar.gz
+          url="https://github.com/astral-sh/uv/releases/download/$(uvRelease)/$tarball"
+          cd "$(Agent.TempDirectory)"
+          curl -fsSLO "$url"
+          curl -fsSL "$url.sha256" | sha256sum -c -
+          mkdir -p "$dir"
+          tar -xzf "$tarball" -C "$dir" --strip-components=1
+          echo "##vso[task.prependpath]$dir"
+        displayName: Install uv
+[%- endmacro %]
 
 jobs:
   - job: lint
@@ -79,13 +95,7 @@ jobs:
     steps:
       - checkout: self
         fetchDepth: '1'
-      # Installer for this exact release, served by Astral; it verifies the
-      # downloaded binary's checksum.
-      - script: |
-          set -euo pipefail
-          curl -LsSf "https://astral.sh/uv/$(uvRelease)/install.sh" | sh
-          echo "##vso[task.prependpath]$UV_INSTALL_DIR"
-        displayName: Install uv
+[[- install_uv() ]]
       # --locked fails when uv.lock is out of date with pyproject.toml
       # (--frozen would install the stale lock and `uv run` would re-lock).
       - script: uv sync --locked --all-extras
@@ -105,11 +115,7 @@ jobs:
     steps:
       - checkout: self
         fetchDepth: '1'
-      - script: |
-          set -euo pipefail
-          curl -LsSf "https://astral.sh/uv/$(uvRelease)/install.sh" | sh
-          echo "##vso[task.prependpath]$UV_INSTALL_DIR"
-        displayName: Install uv
+[[- install_uv() ]]
       - script: uv sync --locked --all-extras
         displayName: Install dependencies
 [%- if flavor == 'browser' %]
@@ -138,11 +144,7 @@ jobs:
     steps:
       - checkout: self
         fetchDepth: '1'
-      - script: |
-          set -euo pipefail
-          curl -LsSf "https://astral.sh/uv/$(uvRelease)/install.sh" | sh
-          echo "##vso[task.prependpath]$UV_INSTALL_DIR"
-        displayName: Install uv
+[[- install_uv() ]]
       - script: uv sync --resolution lowest-direct --all-extras
         displayName: Install lowest allowed direct dependencies
 [%- if flavor == 'browser' %]
@@ -166,11 +168,7 @@ jobs:
     steps:
       - checkout: self
         fetchDepth: '1'
-      - script: |
-          set -euo pipefail
-          curl -LsSf "https://astral.sh/uv/$(uvRelease)/install.sh" | sh
-          echo "##vso[task.prependpath]$UV_INSTALL_DIR"
-        displayName: Install uv
+[[- install_uv() ]]
       # Only the dev group (pre-commit itself): the hooks run in their own
       # environments, so the package and its runtime deps aren't needed.
       - script: uv sync --frozen --only-dev
@@ -268,6 +266,10 @@ jobs:
           fi
 
           if [ "$BUILD_REASON" = "PullRequest" ]; then
+            # Azure empties the temp directory after each job, but a
+            # self-hosted agent keeps .git between runs, and with it the last
+            # run's worktree entry; prune it, or `add` refuses the path.
+            git worktree prune
             git worktree add --detach "$AGENT_TEMPDIRECTORY/base" HEAD^1
             # The database and checks the first scan downloaded, unchanged, so
             # both reports describe the same set of advisories.

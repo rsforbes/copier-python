@@ -105,7 +105,7 @@ The template repo uses the same tooling it gives projects:
 - **Renovate** (`.github/renovate.json5`) keeps the versions pinned under
   `template/` current: action SHAs (including in `.jinja` workflows), hook
   revs, dev dependency ranges, Trivy, Betterleaks, the dev container
-  feature, and uv and Trivy in `azure-pipelines.yml`. Azure DevOps projects
+  features, and uv and Trivy in `azure-pipelines.yml`. Azure DevOps projects
   have no Dependabot, so they get these through `copier update`. The dev
   container lock (`devcontainer-lock.json.jinja`) holds both platforms' CLI
   features. Each PR runs Template CI against a generated project. Betterleaks

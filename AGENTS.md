@@ -11,10 +11,10 @@ detail for humans is in [CONTRIBUTING.md](CONTRIBUTING.md).
 - In `.jinja` files, Jinja uses `[[ var ]]`, `[% ... %]`, and `[# ... #]`, not
   `{{ }}`: `${{ }}` in GitHub Actions workflows must pass through untouched.
   So must bash's `[[ ]]`: use `[ ]` in scripts inside `.jinja` files.
+  A file that needs no variables should not be `.jinja`.
 - `platform` (`github`, `azure-devops`) picks the hosting platform; keep both
   platforms' files in step when changing CI, hooks, or the docs that
   describe them (see "How the template is laid out" in CONTRIBUTING.md).
-  A file that needs no variables should not be `.jinja`.
 - Questions are in `copier.yml`. Keep them few: add a `flavor` choice rather
   than a new yes/no question, and no personal defaults (names, emails, GitHub
   owners) anywhere in the template.

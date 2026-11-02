@@ -132,24 +132,30 @@ jobs:
           persist-credentials: false
       - name: Check version and checksum
         run: |
-          for ci in template/.github/workflows/ci.yml.jinja \
-              "template/[% if platform == 'azure-devops' %]azure-pipelines.yml[% endif %].jinja"; do
-            version=$(sed -n 's/^ *BETTERLEAKS_VERSION: *//p' "$ci")
-            sha256=$(sed -n 's/^ *BETTERLEAKS_SHA256: *//p' "$ci")
-            for config in template/.pre-commit-config.yaml.jinja .pre-commit-config.yaml; do
-              if ! grep -A1 'repo: https://github.com/betterleaks/betterleaks$' "$config" \
-                  | grep -q "# frozen: v${version//./\\.}\$"; then
-                echo "::error::BETTERLEAKS_VERSION (${version}) in ${ci} does not match the betterleaks rev in ${config}"
-                exit 1
-              fi
-            done
-            tarball="betterleaks_${version}_linux_x64.tar.gz"
-            curl -fsSLO "https://github.com/betterleaks/betterleaks/releases/download/v${version}/${tarball}"
-            if ! echo "${sha256}  ${tarball}" | sha256sum -c -; then
-              echo "::error::BETTERLEAKS_SHA256 in ${ci} does not match the v${version} release; take the linux_x64 sha256 from its checksums.txt"
+          github=template/.github/workflows/ci.yml.jinja
+          azure="template/[% if platform == 'azure-devops' %]azure-pipelines.yml[% endif %].jinja"
+          version=$(sed -n 's/^ *BETTERLEAKS_VERSION: *//p' "$github")
+          sha256=$(sed -n 's/^ *BETTERLEAKS_SHA256: *//p' "$github")
+          # The two platforms' CI must carry the same pin, so the checks
+          # below (and the download) run once, on the GitHub one.
+          if [ "$(sed -n 's/^ *BETTERLEAKS_VERSION: *//p' "$azure")" != "$version" ] \
+              || [ "$(sed -n 's/^ *BETTERLEAKS_SHA256: *//p' "$azure")" != "$sha256" ]; then
+            echo "::error::BETTERLEAKS_VERSION and BETTERLEAKS_SHA256 differ between ${github} and ${azure}"
+            exit 1
+          fi
+          for config in template/.pre-commit-config.yaml.jinja .pre-commit-config.yaml; do
+            if ! grep -A1 'repo: https://github.com/betterleaks/betterleaks$' "$config" \
+                | grep -q "# frozen: v${version//./\\.}\$"; then
+              echo "::error::BETTERLEAKS_VERSION (${version}) does not match the betterleaks rev in ${config}"
               exit 1
             fi
           done
+          tarball="betterleaks_${version}_linux_x64.tar.gz"
+          curl -fsSLO "https://github.com/betterleaks/betterleaks/releases/download/v${version}/${tarball}"
+          if ! echo "${sha256}  ${tarball}" | sha256sum -c -; then
+            echo "::error::BETTERLEAKS_SHA256 does not match the v${version} release; take the linux_x64 sha256 from its checksums.txt"
+            exit 1
+          fi
 
   devcontainer:
     name: Dev container (${{ matrix.flavor }}, ${{ matrix.platform }})
