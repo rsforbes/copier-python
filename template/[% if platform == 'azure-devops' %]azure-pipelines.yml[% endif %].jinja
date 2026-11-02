@@ -63,9 +63,9 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-  # uv's version; newer releases are listed at
-  # https://github.com/astral-sh/uv/releases. (Not UV_VERSION: uv reads UV_*
-  # environment variables, and pipeline variables become environment
+  # uv's version, the same as the dev container's; newer releases are listed
+  # at https://github.com/astral-sh/uv/releases. (Not UV_VERSION: uv reads
+  # UV_* environment variables, and pipeline variables become environment
   # variables.)
   uvRelease: 0.13.5
 [#- The uv install every job but the scanners starts with, defined once. #]
