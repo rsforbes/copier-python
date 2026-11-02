@@ -4,15 +4,19 @@
 # see CONTRIBUTING.md). Run every hook against the whole tree with
 # `uv run pre-commit run --all-files`.
 #
-# CI runs this same file (see the `pre-commit` job in .github/workflows/ci.yml),
+# CI runs this same file (see the `pre-commit` job in [% if platform == 'github' %].github/workflows/ci.yml[% else %]azure-pipelines.yml[% endif %]),
 # so the hooks are the single source of truth for the rules: what passes
 # locally passes in CI. Hooks are a fast local check only — `git commit
 # --no-verify` skips them — so CI is what actually enforces them.
 #
 # Hook revs are pinned to full commit SHAs (with the tag in a trailing comment),
 # not tags: tags are mutable and can be repointed at malicious code, as in the
-# March 2026 trivy-action compromise. Dependabot's `pre-commit` ecosystem keeps
+# March 2026 trivy-action compromise.
+[%- if platform == 'github' %] Dependabot's `pre-commit` ecosystem keeps
 # the SHAs current (see .github/dependabot.yml).
+[%- else %] The template keeps the SHAs current (`copier
+# update`); to bump them sooner, run `uv run pre-commit autoupdate --freeze`.
+[%- endif %]
 #
 # Trivy is deliberately not a hook: its results depend on a vulnerability
 # database that changes daily, so a newly published CVE would block unrelated
@@ -44,12 +48,15 @@ repos:
         args:
           - --config=p/python
           - --config=p/security-audit
+[%- if platform == 'github' %]
           - --config=p/github-actions
+[%- endif %]
           - --config=p/dockerfile
           - --metrics=off
           - --error
           - --quiet
           - --disable-version-check
+[%- if platform == 'github' %]
 
   # GitHub Actions workflow linter: YAML/expression errors, invalid inputs,
   # shellcheck on `run:` scripts. Builds with Go, like betterleaks.
@@ -68,3 +75,13 @@ repos:
     rev: c92afdf2c6ca336aaa8f39e2bd8d48f62dbd8e1f # frozen: v1.31.1
     hooks:
       - id: zizmor
+[%- else %]
+
+  # Azure Pipelines: checks azure-pipelines.yml against the Azure Pipelines
+  # schema (misspelled keys, wrong types), which Azure DevOps otherwise reports
+  # only when the pipeline runs.
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0494aa7fa1314e98913a41227d8f0a515b2c1049 # frozen: 0.38.2
+    hooks:
+      - id: check-azure-pipelines
+[%- endif %]

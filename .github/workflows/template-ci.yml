@@ -2,14 +2,16 @@
 # a template change that breaks new projects fails here first.
 #
 # - `generate`: the generated project's lint, tests, CLI, and pre-commit hooks,
-#   for each flavor (the browser flavor adds Playwright, its code, and tests).
+#   for each flavor (the browser flavor adds Playwright, its code, and tests)
+#   and platform (GitHub, or Azure DevOps: its pipeline checked against the
+#   Azure Pipelines schema by the project's pre-commit hook).
 # - `devcontainer`: builds and starts each flavor's dev container with the
 #   devcontainer CLI (features and post-create included), then checks the
 #   tools inside it. This catches breakage in the Dockerfile or post-create,
 #   e.g. an apt source or a browser download that stopped working.
 # - `pre-commit`: the template repo's own hooks on its root files.
-# - `betterleaks-pin`: the generated CI's Betterleaks version and checksum,
-#   which Renovate can only half-update.
+# - `betterleaks-pin`: the generated CI's Betterleaks version and checksum (in
+#   both platforms' CI), which Renovate can only half-update.
 
 name: Template CI
 
@@ -26,12 +28,13 @@ permissions:
 
 jobs:
   generate:
-    name: Generate (${{ matrix.flavor }})
+    name: Generate (${{ matrix.flavor }}, ${{ matrix.platform }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         flavor: [base, browser]
+        platform: [github, azure-devops]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,10 +44,33 @@ jobs:
       - name: Generate project
         env:
           FLAVOR: ${{ matrix.flavor }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
           uvx copier copy --trust --defaults --vcs-ref HEAD \
-            --data-file .github/ci-answers.yml -d flavor="$FLAVOR" \
+            --data-file .github/ci-answers.yml -d flavor="$FLAVOR" -d platform="$PLATFORM" \
             . "$RUNNER_TEMP/demo-project"
+      # Each platform gets only its own CI files.
+      - name: Check platform files
+        working-directory: ${{ runner.temp }}/demo-project
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          # One test per line: a failure inside an && list doesn't stop the
+          # script.
+          if [ "$PLATFORM" = github ]; then
+            test -f .github/workflows/ci.yml
+            test -f release-please-config.json
+            test ! -e azure-pipelines.yml
+          else
+            test -f azure-pipelines.yml
+            test ! -e .github
+            test ! -e release-please-config.json
+            test ! -e .release-please-manifest.json
+            # No link to the GitHub repository it doesn't have.
+            if grep -rIl --exclude-dir=.git --exclude-dir=.venv 'github\.com/example' .; then
+              exit 1
+            fi
+          fi
       - name: Lint
         working-directory: ${{ runner.temp }}/demo-project
         run: |
@@ -60,9 +86,10 @@ jobs:
         run: |
           uv run --locked pytest
           uv run --locked demo-project --version
-      # Every hook the generated project's own CI runs (Semgrep, actionlint,
-      # zizmor), so a template file a hook flags fails here, not in each new
-      # project. Betterleaks is skipped as in the project's CI.
+      # Every hook the generated project's own CI runs (Semgrep, and actionlint
+      # and zizmor or the Azure Pipelines schema check), so a template file a
+      # hook flags fails here, not in each new project. Betterleaks is skipped
+      # as in the project's CI.
       - name: Run pre-commit hooks
         working-directory: ${{ runner.temp }}/demo-project
         env:
@@ -105,30 +132,37 @@ jobs:
           persist-credentials: false
       - name: Check version and checksum
         run: |
-          ci=template/.github/workflows/ci.yml.jinja
-          version=$(sed -n 's/^ *BETTERLEAKS_VERSION: *//p' "$ci")
-          sha256=$(sed -n 's/^ *BETTERLEAKS_SHA256: *//p' "$ci")
-          for config in template/.pre-commit-config.yaml .pre-commit-config.yaml; do
-            if ! grep -A1 'repo: https://github.com/betterleaks/betterleaks$' "$config" \
-                | grep -q "# frozen: v${version//./\\.}\$"; then
-              echo "::error::BETTERLEAKS_VERSION (${version}) in ${ci} does not match the betterleaks rev in ${config}"
+          for ci in template/.github/workflows/ci.yml.jinja \
+              "template/[% if platform == 'azure-devops' %]azure-pipelines.yml[% endif %].jinja"; do
+            version=$(sed -n 's/^ *BETTERLEAKS_VERSION: *//p' "$ci")
+            sha256=$(sed -n 's/^ *BETTERLEAKS_SHA256: *//p' "$ci")
+            for config in template/.pre-commit-config.yaml.jinja .pre-commit-config.yaml; do
+              if ! grep -A1 'repo: https://github.com/betterleaks/betterleaks$' "$config" \
+                  | grep -q "# frozen: v${version//./\\.}\$"; then
+                echo "::error::BETTERLEAKS_VERSION (${version}) in ${ci} does not match the betterleaks rev in ${config}"
+                exit 1
+              fi
+            done
+            tarball="betterleaks_${version}_linux_x64.tar.gz"
+            curl -fsSLO "https://github.com/betterleaks/betterleaks/releases/download/v${version}/${tarball}"
+            if ! echo "${sha256}  ${tarball}" | sha256sum -c -; then
+              echo "::error::BETTERLEAKS_SHA256 in ${ci} does not match the v${version} release; take the linux_x64 sha256 from its checksums.txt"
               exit 1
             fi
           done
-          tarball="betterleaks_${version}_linux_x64.tar.gz"
-          curl -fsSLO "https://github.com/betterleaks/betterleaks/releases/download/v${version}/${tarball}"
-          if ! echo "${sha256}  ${tarball}" | sha256sum -c -; then
-            echo "::error::BETTERLEAKS_SHA256 in ${ci} does not match the v${version} release; take the linux_x64 sha256 from its checksums.txt"
-            exit 1
-          fi
 
   devcontainer:
-    name: Dev container (${{ matrix.flavor }})
+    name: Dev container (${{ matrix.flavor }}, ${{ matrix.platform }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         flavor: [base, browser]
+        platform: [github]
+        # The platform changes only the CLI feature, so one Azure DevOps leg.
+        include:
+          - flavor: base
+            platform: azure-devops
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -138,23 +172,29 @@ jobs:
       - name: Generate project
         env:
           FLAVOR: ${{ matrix.flavor }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
           uvx copier copy --trust --defaults --vcs-ref HEAD \
-            --data-file .github/ci-answers.yml -d flavor="$FLAVOR" \
+            --data-file .github/ci-answers.yml -d flavor="$FLAVOR" -d platform="$PLATFORM" \
             . "$RUNNER_TEMP/demo-project"
       - name: Build and start the dev container
         run: npx --yes @devcontainers/cli@0.89.0 up --workspace-folder "$RUNNER_TEMP/demo-project"
       - name: Check tools inside the container
         env:
           FLAVOR: ${{ matrix.flavor }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
           # The script runs in the container's shell, so its $ must not
           # expand here.
           # shellcheck disable=SC2016
           npx --yes @devcontainers/cli@0.89.0 exec --workspace-folder "$RUNNER_TEMP/demo-project" \
-            env FLAVOR="$FLAVOR" bash -euc '
+            env FLAVOR="$FLAVOR" PLATFORM="$PLATFORM" bash -euc '
               claude --version
-              gh --version | head -1
+              if [ "$PLATFORM" = github ]; then
+                gh --version | head -1
+              else
+                az devops -h >/dev/null && az version
+              fi
               # The container must use its own venv, not the host .venv in
               # the bind mount (created by the uv sync task in copier.yml).
               test "$(uv run --locked python -c "import sys; print(sys.prefix)")" \

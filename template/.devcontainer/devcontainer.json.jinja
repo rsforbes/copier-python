@@ -20,12 +20,26 @@
     "workspaceFolder": "/workspaces/[[ project_name ]]",
     "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/[[ project_name ]],type=bind,consistency=cached",
 
+[%- if platform == 'github' %]
+
     // Dev container features layered onto the image. The github-cli feature
     // installs `gh` via the devcontainers-maintained recipe, avoiding a manual
     // apt/gpg setup in the Dockerfile.
     "features": {
         "ghcr.io/devcontainers/features/github-cli:1": {}
     },
+[%- else %]
+
+    // Dev container features layered onto the image. The azure-cli feature
+    // installs `az` with the azure-devops extension (`az repos pr ...`) via
+    // the devcontainers-maintained recipe, avoiding a manual apt/gpg setup in
+    // the Dockerfile.
+    "features": {
+        "ghcr.io/devcontainers/features/azure-cli:1": {
+            "extensions": "azure-devops"
+        }
+    },
+[%- endif %]
 
     // VS Code specific customizations
     "customizations": {

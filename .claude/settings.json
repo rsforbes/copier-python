@@ -64,6 +64,9 @@
       "Bash(gh release create *)",
       "Bash(gh release delete *)",
       "Bash(gh repo delete *)",
+      "Bash(az repos pr create *)",
+      "Bash(az repos pr update *)",
+      "Bash(az repos delete *)",
       "mcp__github__create_pull_request",
       "mcp__github__merge_pull_request"
     ]

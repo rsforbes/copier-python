@@ -20,7 +20,7 @@ uv sync                               # install dependencies
 uv run pytest                         # unit tests
 uv run ruff format .                  # format
 uv run ruff check --fix .             # lint
-uv run pre-commit run --all-files     # secrets, SAST, workflow lint/audit
+uv run pre-commit run --all-files     # secrets, SAST, [% if platform == 'github' %]workflow lint/audit[% else %]pipeline schema check[% endif %]
 uv add <package>                      # add a dependency (--dev for tooling)
 ```
 
@@ -55,10 +55,19 @@ uv run playwright show-trace <file.zip>          # replay a recorded run
   [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
   (`feat:`, `fix:`, `docs:`, ...): PRs are squash-merged, so the title sets
   the version bump and changelog entry.
+[%- if platform == 'github' %]
 - Don't bump the version or edit `CHANGELOG.md`; release-please does both.
 - Pin GitHub Actions and pre-commit hook revs to full commit SHAs with the
   version in a trailing comment; Dependabot updates them.
 - Don't suppress a security finding (Betterleaks, Semgrep, zizmor, Trivy)
+[%- else %]
+- Don't bump the version or edit `CHANGELOG.md` outside a release pull
+  request ("Releasing" in CONTRIBUTING.md).
+- Pin pre-commit hook revs to full commit SHAs with the version in a
+  trailing comment, and tools in `azure-pipelines.yml` to exact versions with
+  a checksum or commit SHA.
+- Don't suppress a security finding (Betterleaks, Semgrep, Trivy)
+[%- endif %]
   without confirming it's a false positive; suppress narrowly, with a comment
   saying why (see CONTRIBUTING.md).
 - Configuration and secrets come from environment variables only; locally,

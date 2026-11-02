@@ -1,6 +1,7 @@
 // Renovate — keeps the versions pinned in this template current, so new
-// projects don't start out stale. (Generated projects use Dependabot, see
-// template/.github/dependabot.yml; this file is for the template repo only.)
+// projects don't start out stale. (Generated GitHub projects use Dependabot,
+// see template/.github/dependabot.yml; Azure DevOps projects get new pins with
+// `copier update`. This file is for the template repo only.)
 //
 // Renovate rather than Dependabot here because most pins live in `.jinja` files
 // (ci.yml.jinja, release.yml.jinja, pyproject.toml.jinja, ...), which
@@ -45,7 +46,7 @@
       // pre-commit manager doesn't keep the SHA and the comment in step.
       customType: "regex",
       description: "pre-commit hook revs frozen to a SHA",
-      managerFilePatterns: ["/(^|/)\\.pre-commit-config\\.ya?ml$/"],
+      managerFilePatterns: ["/(^|/)\\.pre-commit-config\\.ya?ml(\\.jinja)?$/"],
       matchStrings: [
         "repo: https://github\\.com/(?<depName>[^/\\s]+/[^/\\s]+)\\n\\s+rev: (?<currentDigest>[0-9a-f]{40}) # frozen: (?<currentValue>\\S+)",
       ],
@@ -72,17 +73,41 @@
       datasourceTemplate: "github-releases",
     },
     {
-      // BETTERLEAKS_VERSION in the generated CI. Its BETTERLEAKS_SHA256 can't
-      // be computed by Renovate: the PR fails Template CI's checksum check
-      // until you push the new sha256 (from the release's checksums.txt) to
-      // the branch.
+      // BETTERLEAKS_VERSION in the generated CI, on both platforms. Its
+      // BETTERLEAKS_SHA256 can't be computed by Renovate: the PR fails
+      // Template CI's checksum check until you push the new sha256 (from the
+      // release's checksums.txt) to the branch.
       customType: "regex",
       description: "Betterleaks version in the generated CI",
-      managerFilePatterns: ["/^template/\\.github/workflows/ci\\.yml\\.jinja$/"],
+      managerFilePatterns: [
+        "/^template/\\.github/workflows/ci\\.yml\\.jinja$/",
+        "/^template/[^/]*azure-pipelines\\.yml[^/]*\\.jinja$/",
+      ],
       matchStrings: ["BETTERLEAKS_VERSION: (?<currentValue>\\S+)"],
       depNameTemplate: "betterleaks/betterleaks",
       datasourceTemplate: "github-releases",
       extractVersionTemplate: "^v(?<version>.*)$",
+    },
+    {
+      // The uv release the Azure Pipelines CI installs.
+      customType: "regex",
+      description: "uv version in the generated Azure Pipelines CI",
+      managerFilePatterns: ["/^template/[^/]*azure-pipelines\\.yml[^/]*\\.jinja$/"],
+      matchStrings: ["uvRelease: (?<currentValue>\\S+)"],
+      depNameTemplate: "astral-sh/uv",
+      datasourceTemplate: "github-releases",
+    },
+    {
+      // Trivy's installer in the Azure Pipelines CI, fetched at a release's
+      // commit: the SHA and the version passed to it move together.
+      customType: "regex",
+      description: "Trivy version in the generated Azure Pipelines CI",
+      managerFilePatterns: ["/^template/[^/]*azure-pipelines\\.yml[^/]*\\.jinja$/"],
+      matchStrings: [
+        "aquasecurity/trivy/(?<currentDigest>[0-9a-f]{40})/contrib/install\\.sh \\\\\\n\\s+\\| sh -s -- -b \\S+ (?<currentValue>v\\S+)",
+      ],
+      depNameTemplate: "aquasecurity/trivy",
+      datasourceTemplate: "github-tags",
     },
     {
       // The devcontainer CLI Template CI builds containers with.
@@ -131,6 +156,12 @@
     {
       matchDatasources: ["pypi"],
       semanticCommitType: "build",
+    },
+    {
+      // trivy-action's `version:` (GitHub) and the installer pin (Azure
+      // DevOps) in one PR, so both platforms scan with the same Trivy.
+      matchPackageNames: ["aquasecurity/trivy"],
+      groupName: "Trivy",
     },
     {
       // The hook rev and the CI's BETTERLEAKS_VERSION must move together (the

@@ -21,6 +21,13 @@ git config core.hooksPath .githooks
   usual `{{ }}`, because GitHub Actions workflows are full of `${{ }}`.
 - Questions live in `copier.yml`. Prefer adding a `flavor` choice over a new
   yes/no question.
+- `platform` (`github` or `azure-devops`) picks the hosting platform. Guard
+  platform-specific content with `[% if platform == 'github' %]`. A file
+  only Azure DevOps projects get has the condition in its name
+  (`azure-pipelines.yml`), like a flavor's; the GitHub-only files
+  (`.github/`, the release-please config) are left out by `_exclude` in
+  `copier.yml` instead, so their paths, which Renovate and Template CI read,
+  stay put.
 - Files at the repo root (this one, `.github/`, `.pre-commit-config.yaml`, ...)
   belong to the template repo and are not copied.
 - Every project targets one Python version, `python_version` in `copier.yml`
@@ -65,10 +72,13 @@ earlier version.
 
 Template CI (`.github/workflows/template-ci.yml`) runs on every pull request:
 
-- **Generate**: generates a project and runs its lint, tests, CLI, and
-  pre-commit hooks, i.e. the template's files as rendered.
-- **Dev container**: builds and starts each flavor's dev container and checks
-  the tools inside it.
+- **Generate**: generates a project for each flavor and platform, checks it
+  got only its platform's CI files, and runs its lint, tests, CLI, and
+  pre-commit hooks, i.e. the template's files as rendered. For Azure DevOps
+  the hooks include the Azure Pipelines schema check; the pipeline itself
+  can only run in Azure DevOps.
+- **Dev container**: builds and starts each flavor's dev container (and an
+  Azure DevOps one) and checks the tools inside it.
 - **Template pre-commit hooks**: this repo's own hooks on its root files.
 - **Betterleaks pin**: the generated CI's Betterleaks version and checksum
   (see Renovate below).
@@ -94,8 +104,11 @@ The template repo uses the same tooling it gives projects:
   `template/` under `docs`, `chore`, `refactor`, `style`, or `test`.
 - **Renovate** (`.github/renovate.json5`) keeps the versions pinned under
   `template/` current: action SHAs (including in `.jinja` workflows), hook
-  revs, dev dependency ranges, Trivy, Betterleaks, and the dev container
-  feature. Each PR runs Template CI against a generated project. Betterleaks
+  revs, dev dependency ranges, Trivy, Betterleaks, the dev container
+  feature, and uv and Trivy in `azure-pipelines.yml`. Azure DevOps projects
+  have no Dependabot, so they get these through `copier update`. The dev
+  container lock (`devcontainer-lock.json.jinja`) holds both platforms' CLI
+  features. Each PR runs Template CI against a generated project. Betterleaks
   PRs need one manual step: push the new `BETTERLEAKS_SHA256` (from the
   release's `checksums.txt`) to the PR branch; the `betterleaks-pin` job fails
   until you do. Renovate runs as the
