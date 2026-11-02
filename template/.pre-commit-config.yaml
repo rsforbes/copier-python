@@ -36,7 +36,7 @@ repos:
   # require_serial: one Semgrep process for all files, instead of one per CPU
   # each fetching and compiling the rulesets.
   - repo: https://github.com/semgrep/pre-commit
-    rev: 4442ea4b1e93a847e27a22559ee8d4b53795c549 # frozen: v1.181.0
+    rev: dfdeebdd309a043859ba33a555839911e7b11801 # frozen: v1.182.1
     hooks:
       - id: semgrep
         types_or: [python, yaml, dockerfile]
