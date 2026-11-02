@@ -12,6 +12,9 @@
 # - `pre-commit`: the template repo's own hooks on its root files.
 # - `betterleaks-pin`: the generated CI's Betterleaks version and checksum (in
 #   both platforms' CI), which Renovate can only half-update.
+# - `passed`: passes only when every job above did. It is the check the main
+#   branch ruleset requires (with the PR title check), so adding a flavor or
+#   platform, which renames the matrix jobs, doesn't need a ruleset change.
 
 name: Template CI
 
@@ -212,3 +215,22 @@ jobs:
                 uv run --locked playwright --version
               fi
             '
+
+  passed:
+    name: Template CI passed
+    # always(): a failed or cancelled job must fail this check, not skip it;
+    # a ruleset counts a skipped check as passing.
+    if: always()
+    needs: [generate, pre-commit, betterleaks-pin, devcontainer]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            if [ "$result" != success ]; then
+              echo "::error::Not every Template CI job passed: $RESULTS"
+              exit 1
+            fi
+          done
