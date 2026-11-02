@@ -28,6 +28,11 @@ git config core.hooksPath .githooks
   (`.github/`, the release-please config) are left out by `_exclude` in
   `copier.yml` instead, so their paths, which Renovate and Template CI read,
   stay put.
+- Steps both platforms' CI runs the same way (the Trivy gate, the Betterleaks
+  install) are macros in `partials/ci.jinja`, which `ci.yml.jinja` and
+  `azure-pipelines.yml.jinja` import, so a fix there reaches both. Copier
+  loads templates from the repo root, so `partials/` is importable without
+  being copied into projects.
 - Files at the repo root (this one, `.github/`, `.pre-commit-config.yaml`, ...)
   belong to the template repo and are not copied.
 - Every project targets one Python version, `python_version` in `copier.yml`
