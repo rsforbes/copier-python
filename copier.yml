@@ -11,6 +11,14 @@ _answers_file: .copier-answers.yml
 _skip_if_exists:
   - CHANGELOG.md
   - .release-please-manifest.json
+# GitHub-only files, left out of Azure DevOps projects. A file that's new on
+# one platform is instead named with a condition (azure-pipelines.yml), as the
+# flavors do; these are excluded here so their paths, which Renovate and
+# Template CI read, don't change. An empty pattern matches nothing.
+_exclude:
+  - "[% if platform != 'github' %].github[% endif %]"
+  - "[% if platform != 'github' %]release-please-config.json[% endif %]"
+  - "[% if platform != 'github' %].release-please-manifest.json[% endif %]"
 
 # GitHub Actions workflows use ${{ ... }}, which collides with Jinja's default
 # {{ ... }}. Template files (*.jinja) use [[ ... ]] and [% ... %] instead.
@@ -83,12 +91,37 @@ author_email:
     Enter an email address, e.g. name@example.com.
     [% endif %]
 
+platform:
+  type: str
+  help: Where the repository will be hosted
+  choices:
+    "github       - GitHub: Actions CI, Dependabot, release-please releases": github
+    "azure-devops - Azure DevOps: Azure Pipelines CI, manual releases": azure-devops
+  default: github
+
 github_owner:
   type: str
   help: GitHub user or organization that will own the repository
+  when: "[[ platform == 'github' ]]"
   validator: >-
     [% if not (github_owner | regex_search('^[A-Za-z0-9][A-Za-z0-9-]*$')) %]
     Enter a GitHub user or organization name.
+    [% endif %]
+
+# The clone URL Azure DevOps shows under Repos > Files > Clone, without the
+# "user@" part (the answer is saved in .copier-answers.yml and the project's
+# files, so it shouldn't carry a username). Asked, rather than built from an
+# organization and project, because the repository name often differs from
+# project_name. Any host: dev.azure.com, <org>.visualstudio.com, or an Azure
+# DevOps Server.
+azure_devops_repo_url:
+  type: str
+  help: Azure DevOps repository URL, e.g. https://dev.azure.com/my-org/my-project/_git/my-repo
+  when: "[[ platform == 'azure-devops' ]]"
+  validator: >-
+    [% if not (azure_devops_repo_url | regex_search('^https://[^/@\\s"\\\\]+(/[^/@\\s"\\\\]+)+/_git/[^/@\\s"\\\\]+$')) %]
+    Enter the repository's https URL, e.g. https://dev.azure.com/my-org/my-project/_git/my-repo
+    [% if '@' in azure_devops_repo_url %](remove the user@ before the host)[% endif %]
     [% endif %]
 
 # Derived values: never asked, recomputed on every copy/update.
@@ -119,4 +152,4 @@ _message_after_copy: |
   [%- endif %]
     uv run pytest
 
-  Before pushing to GitHub, read "First push" in the new project's README.md.
+  Before pushing to [% if platform == 'github' %]GitHub[% else %]Azure DevOps[% endif %], read "First push" in the new project's README.md.

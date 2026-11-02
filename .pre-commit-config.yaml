@@ -1,6 +1,6 @@
 # pre-commit hooks for the template repo itself — the same hooks generated
-# projects get (template/.pre-commit-config.yaml; see the comments there for
-# what each one does). Run on `git commit` once enabled with
+# projects get (template/.pre-commit-config.yaml.jinja; see the comments
+# there for what each one does). Run on `git commit` once enabled with
 # `git config core.hooksPath .githooks`; run every hook against the whole tree
 # with `uvx --python 3.14 pre-commit run --all-files`. Template CI runs this
 # file too.

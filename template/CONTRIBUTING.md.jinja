@@ -11,12 +11,18 @@ Each commit is checked by [pre-commit](https://pre-commit.com/) hooks defined in
   changes for secrets (API keys, tokens, passwords).
 - **[Semgrep](https://semgrep.dev/)** scans the staged Python, YAML, and
   Dockerfile changes for security issues (SAST).
+[%- if platform == 'github' %]
 - **[actionlint](https://github.com/rhysd/actionlint)** checks GitHub Actions
   workflows for errors.
 - **[zizmor](https://docs.zizmor.sh/)** audits GitHub Actions workflows,
   `dependabot.yml`, and `.pre-commit-config.yaml` for security issues. Set
   `GH_TOKEN` (e.g. `GH_TOKEN=$(gh auth token)`) to add its online audits; CI
   always runs them.
+[%- else %]
+- **[check-jsonschema](https://check-jsonschema.readthedocs.io/)** checks
+  `azure-pipelines.yml` against the Azure Pipelines schema, so a misspelled
+  key fails the commit instead of the pipeline run.
+[%- endif %]
 
 The hooks run from [`.githooks/pre-commit`](.githooks/pre-commit), which works
 both inside the dev container and directly on your machine. The dev container
@@ -28,7 +34,7 @@ git config core.hooksPath .githooks
 
 The only requirement is [uv](https://docs.astral.sh/uv/) (or `pre-commit`)
 on your PATH. If you use the dev container, the setting is shared with your
-machine, so commits from a host terminal, GitHub Desktop, or an IDE outside the
+machine, so commits from a host terminal, a desktop git client, or an IDE outside the
 container are checked as well. Don't use `pre-commit install`: the hook it
 generates is tied to one Python environment, so it breaks commits made from
 the other side of the container. Setting `core.hooksPath` also means git stops
@@ -52,6 +58,8 @@ the dev container Dockerfile (misconfigurations). Trivy's settings are in
 `trivy fs .` from the repo root. On a pull request, Trivy fails only on
 findings the base branch doesn't already have; the rest show as warnings.
 
+[%- if platform == 'github' %]
+
 Trivy and Semgrep also run weekly and on every push to `main`
 ([Security](.github/workflows/security.yml) workflow), because new CVEs and
 updated Semgrep rules can turn up findings without any code change. These runs
@@ -59,6 +67,16 @@ fail on every finding, so a new advisory turns `main` red instead of blocking
 unrelated pull requests. Their
 findings are listed under the repository's **Security > Code scanning** tab,
 and a failing run opens a "Security scan failing on main" issue.
+[%- else %]
+
+The whole pipeline ([`azure-pipelines.yml`](azure-pipelines.yml)) also runs
+weekly and on every push to `main`, because new CVEs and updated Semgrep rules
+can turn up findings without any code change. These runs fail on every
+finding, so a new advisory turns `main` red instead of blocking unrelated pull
+requests. Findings are in the failed job's log. Azure DevOps doesn't notify
+anyone of a failing scheduled run by default; subscribe to "A build fails"
+under **Project settings > Notifications**.
+[%- endif %]
 
 ### False positives
 
@@ -69,7 +87,9 @@ possible, with a comment saying why:
 | ----------- | ------------------------------------------------------------------------------------ |
 | Betterleaks | add the finding's fingerprint to [`.betterleaksignore`](.betterleaksignore)          |
 | Semgrep     | a `# nosemgrep: <rule-id>` comment on the flagged line                               |
+[%- if platform == 'github' %]
 | zizmor      | a `# zizmor: ignore[<audit>]` comment on the flagged line                            |
+[%- endif %]
 | Trivy       | add the vulnerability ID to a `.trivyignore` file (prefer upgrading the package)     |
 
 ## Claude Code
@@ -98,7 +118,8 @@ for [Claude Code](https://code.claude.com/docs):
   `claude plugin install security-guidance@claude-plugins-official --scope project`.
 
 These guard against Claude being over-eager, not against deliberate misuse:
-a program Claude runs can still read files, and `gh api` isn't restricted.
+a program Claude runs can still read files, and
+[% if platform == 'github' %]`gh api`[% else %]`az devops invoke`[% endif %] isn't restricted.
 
 Personal overrides go in `.claude/settings.local.json` (git-ignored). Its
 permission rules add to the deny and ask rules above but can't lift them;
@@ -108,9 +129,15 @@ its other settings (`env`, `attribution`, `enabledPlugins`) override these.
 
 This repository **squash-merges** pull requests, so the **PR title becomes the
 commit subject on `main`**. PR titles must follow
-[Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) and
+[Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+[%- if platform == 'github' %] and
 are validated automatically by the [PR Title](.github/workflows/pr-title.yml)
-workflow. Individual commit messages within a PR are collapsed at squash and are
+workflow.
+[%- else %].
+Azure DevOps doesn't check them, so reviewers do. When completing a pull
+request, Azure DevOps suggests "Merged PR <n>: <title>" as the commit
+message; delete the "Merged PR <n>: " prefix so the subject is the title.
+[%- endif %] Individual commit messages within a PR are collapsed at squash and are
 not policed — only the title matters.
 
 The format is:
@@ -146,6 +173,7 @@ build(deps): bump httpx to 0.28.1
 
 A breaking change is marked with a `!` after the type/scope (e.g. `feat!:`) or a
 `BREAKING CHANGE:` footer.
+[%- if platform == 'github' %]
 
 ### How titles drive releases
 
@@ -186,3 +214,35 @@ There's no manual version bump, tag, or upload:
 
 To force a specific version, merge a commit to `main` whose body contains a
 `Release-As: X.Y.Z` footer.
+[%- else %]
+
+### How titles drive releases
+
+The titles decide the next version and the changelog entries:
+
+| Title                                                              | Version bump | Changelog section        |
+| ------------------------------------------------------------------ | ------------ | ------------------------ |
+| `feat!:` / `BREAKING CHANGE:`                                      | major        | ⚠ BREAKING CHANGES       |
+| `feat:`                                                            | minor        | Features                 |
+| `fix:`                                                             | patch        | Bug Fixes                |
+| `perf:`                                                            | patch        | Performance Improvements |
+| `revert:`                                                          | patch        | Reverts                  |
+| `build:`, `chore:`, `ci:`, `docs:`, `refactor:`, `style:`, `test:` | none         | not listed               |
+
+Write the title (and description) as the changelog line a user should read.
+
+## Releasing
+
+Releases are made by hand, in a pull request of their own:
+
+1. Run `git fetch origin`, list the titles merged since the last release
+   (`git log --oneline v<last>..origin/main`, or everything for the first
+   release), and pick the bump from the table above.
+2. Run `uv version --bump major|minor|patch`, which updates `pyproject.toml`
+   and `uv.lock`.
+3. Add a `## [X.Y.Z] - YYYY-MM-DD` section to the top of `CHANGELOG.md`
+   with the titles under the sections above.
+4. Open a pull request titled `chore: release X.Y.Z`, and merge it.
+5. Fetch the merge commit, then tag it and push the tag:
+   `git fetch origin && git tag vX.Y.Z origin/main && git push origin vX.Y.Z`.
+[%- endif %]

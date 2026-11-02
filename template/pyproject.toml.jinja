@@ -1,7 +1,12 @@
 [project]
 name = "[[ project_name ]]"
+[%- if platform == 'github' %]
 # 0.0.0 until the first release: release-please bumps it (a `feat` makes the
 # first release 0.1.0, a `fix` 0.0.1). Don't edit by hand.
+[%- else %]
+# 0.0.0 until the first release. Bump it with `uv version --bump`, which also
+# updates uv.lock (see "Releasing" in CONTRIBUTING.md).
+[%- endif %]
 version = "0.0.0"
 description = "[[ description ]]"
 readme = "README.md"
@@ -26,7 +31,11 @@ dependencies = []
 [[ project_name ]] = "[[ package_name ]].cli:main"
 
 [project.urls]
+[%- if platform == 'github' %]
 Repository = "https://github.com/[[ github_owner ]]/[[ project_name ]]"
+[%- else %]
+Repository = "[[ azure_devops_repo_url ]]"
+[%- endif %]
 
 [dependency-groups]
 dev = [

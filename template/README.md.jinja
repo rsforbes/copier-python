@@ -60,7 +60,7 @@ uv run pytest                          # unit tests (tests/unit)
 RUN_INTEGRATION=1 uv run pytest tests/integration   # integration tests (real services)
 uv run ruff format .                   # format
 uv run ruff check --fix .              # lint
-uv run pre-commit run --all-files      # secrets, SAST, workflow lint/audit
+uv run pre-commit run --all-files      # secrets, SAST, [% if platform == 'github' %]workflow lint/audit[% else %]pipeline schema check[% endif %]
 ```
 
 Pull request titles must follow
@@ -73,6 +73,7 @@ and asks before committing, pushing, or opening a PR (see "Claude Code" in
 CONTRIBUTING.md).
 
 ## First push
+[%- if platform == 'github' %]
 
 One-time GitHub setup after creating the repository:
 
@@ -90,6 +91,40 @@ Then, in the repository settings:
    the GitHub App described at the top of `.github/workflows/release.yml`).
 3. **Settings > Branches** (optional): protect `main` and require the **CI**
    status check.
+[%- else %]
+
+One-time Azure DevOps setup. Create the repository first (Repos > New
+repository, without a README or .gitignore), or use an existing empty one:
+
+```bash
+git add -A && git commit -m "chore: initial commit from copier-python"
+git remote add origin [[ azure_devops_repo_url ]]
+git push -u origin main
+```
+
+If the repository already has commits (for example the README Azure DevOps
+offers to add), merge them in first with
+`git pull origin main --allow-unrelated-histories` and keep this project's
+version of any file both have.
+
+Then, in the Azure DevOps project:
+
+1. **Pipelines > New pipeline > Azure Repos Git**: pick the repository, then
+   "Existing Azure Pipelines YAML file" and `/azure-pipelines.yml`. Run it
+   once. A new organization has no Microsoft-hosted jobs until Microsoft
+   grants its free tier: request it at https://aka.ms/azpipelines-parallelism-request
+   (a few business days), or run the pipeline on a self-hosted agent (see the
+   top of `azure-pipelines.yml`).
+2. **Project settings > Repositories > (this repository) > Policies >
+   Branch policies > main**:
+   - **Build validation**: add the pipeline, so every pull request runs it
+     and can't merge until it passes.
+   - **Limit merge types**: allow squash merge only, so the pull request
+     title becomes the commit on `main` (see CONTRIBUTING.md).
+   - **Require a minimum number of reviewers** (optional).
+3. **Project settings > Notifications** (optional): subscribe to "A build
+   fails", so a failing weekly scan of `main` doesn't go unseen.
+[%- endif %]
 
 ## Template updates
 

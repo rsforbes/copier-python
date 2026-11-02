@@ -1,7 +1,9 @@
 # Answers Template CI passes to Copier (--data-file) for the questions without
-# defaults. The generate and devcontainer jobs set the flavor from their matrices.
+# defaults. The generate and devcontainer jobs set the flavor and platform from
+# their matrices; Copier ignores the answer for the other platform's question.
 project_name: demo-project
 description: Template CI
 author_name: Template CI
 author_email: ci@example.com
 github_owner: example
+azure_devops_repo_url: https://dev.azure.com/example/example/_git/demo-project

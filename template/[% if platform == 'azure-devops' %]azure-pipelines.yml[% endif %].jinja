@@ -1,0 +1,306 @@
+# CI — lint, run the test suite, guard the declared dependency floor, and run
+# the security scans. The Azure Pipelines counterpart of a GitHub project's
+# ci.yml and security.yml, with the same jobs and rules.
+#
+# The project targets a single Python version, [[ python_version ]] (the
+# template's `python_version`; .python-version, which uv reads here, and the
+# dev container use the same one). To move to a newer Python, bump it in the
+# template and run `copier update`.
+#
+# When it runs:
+# - Pull requests: Azure Repos ignores YAML `pr:` triggers. Add this pipeline
+#   to main's branch policy as a build validation ("First push" in README.md),
+#   so every pull request runs it and can't merge until it passes.
+# - Every push to main, and weekly: new CVEs are published against
+#   dependencies that haven't changed, and the Semgrep rulesets change over
+#   time, so a tree that was clean at merge can start failing with no commit.
+#   These runs fail on every finding, so a new advisory turns main red instead
+#   of blocking unrelated pull requests. Nobody is notified of a failing
+#   scheduled run by default: subscribe under Project settings > Notifications
+#   ("A build fails").
+#
+# `lowest_direct` installs the *lowest* versions allowed by our direct
+# dependency constraints (uv --resolution lowest-direct) and runs the suite, so
+# a dependency floor that's too low fails here instead of in an install.
+#
+# Security scanning:
+# - `pre_commit` runs every hook in .pre-commit-config.yaml (Semgrep SAST, and
+#   this file checked against the Azure Pipelines schema) over the whole tree,
+#   so CI enforces exactly what the local hooks check.
+# - `betterleaks` scans the full git history for secrets (the local hook only
+#   sees staged changes).
+# - `trivy` scans uv.lock for vulnerable dependencies and the Dockerfile for
+#   misconfigurations (config in trivy.yaml). On a pull request it fails only
+#   on findings the target branch lacks, so a newly published advisory doesn't
+#   fail every open PR at once.
+#
+# Tools are pinned to exact versions, and downloads are checked against a
+# checksum. Dependabot doesn't run on Azure DevOps; the template keeps these
+# pins current, and `copier update` brings in new ones. To bump one sooner,
+# the comment next to it says how.
+#
+# Multi-line scripts start with `set -e`: unlike GitHub Actions, Azure
+# Pipelines runs them without it, so a failing command (a checksum mismatch,
+# say) would pass the step whenever the last command succeeds. pipefail is
+# added where a download is piped into a shell.
+#
+# The free tier runs one job at a time, so the jobs below queue rather than run
+# in parallel. To run on a self-hosted agent instead of Microsoft-hosted ones,
+# replace `vmImage` with `name: <agent pool>`.
+
+trigger:
+  branches:
+    include: [main]
+
+schedules:
+  - cron: '0 13 * * 1' # Mondays 13:00 UTC
+    displayName: Weekly
+    branches:
+      include: [main]
+    always: 'true' # run even when main hasn't changed since the last run
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  # uv's version; newer releases are listed at
+  # https://github.com/astral-sh/uv/releases. (Not UV_VERSION: uv reads UV_*
+  # environment variables, and pipeline variables become environment
+  # variables.)
+  uvRelease: 0.13.5
+[#- The uv install every job but the scanners starts with, defined once. #]
+[%- macro install_uv() %]
+      # The release archive from GitHub, checked against the release's
+      # checksum (not astral.sh's install script, which is served unpinned).
+      # x86_64, like the Microsoft-hosted agents. Unpacked under the agent's
+      # tools directory rather than ~/.local/bin, which a self-hosted agent
+      # shares with whatever else its user installed.
+      - script: |
+          set -euo pipefail
+          dir="$(Agent.ToolsDirectory)/uv/$(uvRelease)"
+          tarball=uv-x86_64-unknown-linux-gnu.tar.gz
+          url="https://github.com/astral-sh/uv/releases/download/$(uvRelease)/$tarball"
+          cd "$(Agent.TempDirectory)"
+          curl -fsSLO "$url"
+          curl -fsSL "$url.sha256" | sha256sum -c -
+          mkdir -p "$dir"
+          tar -xzf "$tarball" -C "$dir" --strip-components=1
+          echo "##vso[task.prependpath]$dir"
+        displayName: Install uv
+[%- endmacro %]
+
+jobs:
+  - job: lint
+    displayName: Lint (ruff)
+    steps:
+      - checkout: self
+        fetchDepth: '1'
+[[- install_uv() ]]
+      # --locked fails when uv.lock is out of date with pyproject.toml
+      # (--frozen would install the stale lock and `uv run` would re-lock).
+      - script: uv sync --locked --all-extras
+        displayName: Install dependencies
+      - script: uv run ruff format --check .
+        displayName: Ruff format check
+      - script: uv run ruff check .
+        displayName: Ruff lint
+
+  - job: test
+    displayName: Test
+    dependsOn: lint
+[%- if flavor == 'browser' %]
+    variables:
+      PLAYWRIGHT_BROWSERS_PATH: $(Pipeline.Workspace)/.cache/ms-playwright
+[%- endif %]
+    steps:
+      - checkout: self
+        fetchDepth: '1'
+[[- install_uv() ]]
+      - script: uv sync --locked --all-extras
+        displayName: Install dependencies
+[%- if flavor == 'browser' %]
+      # Playwright's browser isn't a Python package, so `uv sync` leaves it
+      # out. The cache holds the download (keyed on the lockfile, which pins
+      # the Playwright version); --with-deps still apt-installs the libraries
+      # Chromium needs on each run.
+      - task: Cache@2
+        displayName: Cache Playwright browsers
+        inputs:
+          key: 'playwright-locked | "$(Agent.OS)" | uv.lock'
+          path: $(PLAYWRIGHT_BROWSERS_PATH)
+      - script: uv run --no-sync playwright install --with-deps chromium
+        displayName: Install Playwright's Chromium
+[%- endif %]
+      - script: uv run pytest
+        displayName: Test
+
+  - job: lowest_direct
+    displayName: Test (lowest-direct floor)
+    dependsOn: lint
+[%- if flavor == 'browser' %]
+    variables:
+      PLAYWRIGHT_BROWSERS_PATH: $(Pipeline.Workspace)/.cache/ms-playwright
+[%- endif %]
+    steps:
+      - checkout: self
+        fetchDepth: '1'
+[[- install_uv() ]]
+      - script: uv sync --resolution lowest-direct --all-extras
+        displayName: Install lowest allowed direct dependencies
+[%- if flavor == 'browser' %]
+      - task: Cache@2
+        displayName: Cache Playwright browsers
+        inputs:
+          key: 'playwright-lowest-direct | "$(Agent.OS)" | uv.lock'
+          path: $(PLAYWRIGHT_BROWSERS_PATH)
+      - script: uv run --no-sync playwright install --with-deps chromium
+        displayName: Install Playwright's Chromium
+[%- endif %]
+      # --no-sync: a plain `uv run` would re-lock at the default (highest)
+      # resolution and reinstall, testing the newest versions instead.
+      - script: uv run --no-sync pytest
+        displayName: Test
+
+  - job: pre_commit
+    displayName: Pre-commit hooks
+    variables:
+      PRE_COMMIT_HOME: $(Pipeline.Workspace)/.cache/pre-commit
+    steps:
+      - checkout: self
+        fetchDepth: '1'
+[[- install_uv() ]]
+      # Only the dev group (pre-commit itself): the hooks run in their own
+      # environments, so the package and its runtime deps aren't needed.
+      - script: uv sync --frozen --only-dev
+        displayName: Install dependencies
+      # The Python hook envs (Semgrep, check-jsonschema) link to this
+      # interpreter, so the cache key includes its version: otherwise a Python
+      # patch bump restores broken envs that pre-commit rebuilds on every run.
+      - script: echo "##vso[task.setvariable variable=pythonVersion]$(uv run --frozen --only-dev python -c 'import sys; print(sys.version.split()[0])')"
+        displayName: Get Python version
+      - task: Cache@2
+        displayName: Cache hook environments
+        inputs:
+          key: 'pre-commit | "$(Agent.OS)" | "py$(pythonVersion)" | .pre-commit-config.yaml'
+          path: $(PRE_COMMIT_HOME)
+      # The betterleaks hook only scans staged changes, so it has nothing to do
+      # here; the `betterleaks` job below scans the full history instead.
+      - script: uv run --frozen --only-dev pre-commit run --all-files --show-diff-on-failure
+        displayName: Run hooks on all files
+        env:
+          SKIP: betterleaks
+
+  - job: betterleaks
+    displayName: Secrets (Betterleaks)
+    variables:
+      # Keep in step with the betterleaks rev in .pre-commit-config.yaml (the
+      # first step fails the job when they differ). To bump: update both, and
+      # take the linux_x64 sha256 from the release's checksums.txt.
+      BETTERLEAKS_VERSION: 1.9.0
+      BETTERLEAKS_SHA256: f8b185a39ffcece2a1ca82bf3a4e7435cd81963ffd16b7a9128daf75f35f6de7
+    steps:
+      - checkout: self
+        fetchDepth: '0' # full history: a secret removed in a later commit is still leaked
+      - script: |
+          set -eu
+          if ! grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
+              | grep -q "# frozen: v${BETTERLEAKS_VERSION//./\\.}\$"; then
+            echo "##vso[task.logissue type=error]BETTERLEAKS_VERSION (${BETTERLEAKS_VERSION}) does not match the betterleaks rev in .pre-commit-config.yaml; bump BETTERLEAKS_VERSION and BETTERLEAKS_SHA256"
+            exit 1
+          fi
+        displayName: Check version matches the pre-commit hook
+      - script: |
+          set -eu
+          tarball="betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/${tarball}"
+          echo "${BETTERLEAKS_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" betterleaks
+        displayName: Install Betterleaks
+      - script: ./betterleaks git --redact --verbose --no-banner .
+        displayName: Scan git history
+
+  - job: trivy
+    displayName: Vulnerabilities (Trivy)
+    variables:
+      # One database for both scans of a pull request.
+      TRIVY_CACHE_DIR: $(Pipeline.Workspace)/.cache/trivy
+    steps:
+      - checkout: self
+        # A pull request build checks out its merge commit; depth 2 brings the
+        # first parent, the branch it merges into, which the gate scans as its
+        # baseline.
+        fetchDepth: '2'
+      # Trivy's installer, fetched at the release's commit rather than its tag
+      # (tags are mutable: in March 2026 an attacker repointed trivy-action's),
+      # checks the downloaded binary against the release's checksums. To bump:
+      # the new release's tag and the commit it points to
+      # (`git ls-remote https://github.com/aquasecurity/trivy refs/tags/vX.Y.Z`).
+      - script: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/e713f67f7d54decdcd9b3132c9751833dcced698/contrib/install.sh \
+            | sh -s -- -b "$(Agent.ToolsDirectory)/trivy" v0.76.1
+          echo "##vso[task.prependpath]$(Agent.ToolsDirectory)/trivy"
+        displayName: Install Trivy
+      - script: trivy fs --config trivy.yaml --format json --output trivy-results.json --exit-code 0 .
+        displayName: Scan dependencies and Dockerfile
+      # Trivy's advisory database moves independently of the code: an advisory
+      # published against a lockfile nobody touched would turn every open PR
+      # red at once. So a PR fails only on findings its target branch lacks,
+      # matched by file, package and advisory (or misconfiguration check), and
+      # the findings the target already had surface as warnings. The version is
+      # not part of the match: a package moved to another version the same
+      # advisory covers was exposed to it before the PR too.
+      #
+      # The target is scanned with its own trivy.yaml and .trivyignore, so a PR
+      # that widens the policy fails on what that uncovers; one that narrows it
+      # passes, and that change shows only in the diff.
+      #
+      # Runs on main (pushes, the weekly schedule, manual runs) have no
+      # baseline and fail on every finding.
+      - script: |
+          set -eu
+          count='[.Results[]? | (.Vulnerabilities[]?, .Misconfigurations[]?)] | length'
+          if [ "$(jq "$count" trivy-results.json)" -eq 0 ]; then
+            echo "No finding under the policy in trivy.yaml."
+            exit 0
+          fi
+
+          if [ "$BUILD_REASON" = "PullRequest" ]; then
+            # Azure empties the temp directory after each job, but a
+            # self-hosted agent keeps .git between runs, and with it the last
+            # run's worktree entry; prune it, or `add` refuses the path.
+            git worktree prune
+            git worktree add --detach "$AGENT_TEMPDIRECTORY/base" HEAD^1
+            # The database and checks the first scan downloaded, unchanged, so
+            # both reports describe the same set of advisories.
+            (cd "$AGENT_TEMPDIRECTORY/base" && trivy fs --skip-db-update --skip-check-update \
+              --format json --output "$BUILD_SOURCESDIRECTORY/trivy-base.json" --exit-code 0 .)
+          else
+            echo '{}' > trivy-base.json
+          fi
+
+          # Splits each file's findings into those the base already had, counted
+          # for the warnings, and the rest, which stay in the report.
+          jq --slurpfile base trivy-base.json '
+            def key($t): "\($t)|\(.PkgName // "")|\(.VulnerabilityID // .ID)";
+            def drop_known($t; $old): if . then map(select($old[key($t)] | not)) else . end;
+            (reduce ($base[0].Results[]? | .Target as $t
+                | (.Vulnerabilities[]?, .Misconfigurations[]?) | key($t))
+              as $k ({}; .[$k] = true)) as $old
+            | .Baseline = [.Results[]? | .Target as $t
+                | {Target: $t, Count: ([(.Vulnerabilities[]?, .Misconfigurations[]?)
+                    | select($old[key($t)])] | length)}
+                | select(.Count > 0)]
+            | .Results |= [.[]? | .Target as $t
+                | .Vulnerabilities |= drop_known($t; $old)
+                | .Misconfigurations |= drop_known($t; $old)]
+          ' trivy-results.json > trivy-gated.json
+
+          jq -r '.Baseline[] | "##vso[task.logissue type=warning]Trivy: \(.Target) carries \(.Count) findings its target branch already had"' trivy-gated.json
+
+          if [ "$(jq "$count" trivy-gated.json)" -gt 0 ]; then
+            trivy convert --format table trivy-gated.json
+            exit 1
+          fi
+          echo "No finding under the policy in trivy.yaml that the target branch lacks."
+        displayName: Gate on findings the change introduces

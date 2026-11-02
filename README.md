@@ -100,6 +100,31 @@ Answer a few questions and start coding. All you need is git and
   included, on every change and every week. Existing projects pick up the
   improvements with one command (`copier update`).
 
+### GitHub or Azure DevOps
+
+Everything above describes a GitHub project, the default. Pick
+`azure-devops` for `platform` and the project is set up for Azure DevOps
+instead:
+
+- **CI on Azure Pipelines:** `azure-pipelines.yml` runs the same jobs as the
+  GitHub workflows (lint, tests, the dependency floor, the pre-commit hooks,
+  Betterleaks over the full history, and Trivy, failing a pull request only
+  on the findings it introduces), on every pull request through a branch
+  policy, on every push to `main`, and weekly.
+- **Checked like the GitHub workflows:** a pre-commit hook validates
+  `azure-pipelines.yml` against the Azure Pipelines schema, in place of
+  actionlint and zizmor, and every tool the pipeline downloads is pinned and
+  checksum-verified.
+- **Left out:** Dependabot, release-please, the PR title check, and the
+  Security tab upload, which are GitHub-only. Releases are a short manual
+  routine (see the generated `CONTRIBUTING.md`), and pins are kept current
+  by the template: `copier update` brings them in.
+- **Dev container:** the Azure CLI with the `azure-devops` extension instead
+  of the GitHub CLI.
+
+The generated README's "First push" covers the one-time Azure DevOps setup:
+creating the pipeline and the branch policy on `main`.
+
 ### Add-on: browser automation
 
 Choose the `browser` flavor when you create a project (or switch an existing
@@ -131,7 +156,9 @@ It asks a few questions:
 | `project_name` | lowercase-with-hyphens; the package is the same with underscores |
 | `description` | one line |
 | `flavor` | `base`, or `browser` (adds Playwright browser automation: Chromium, example code, and tests) |
-| `author_name`, `author_email`, `github_owner` | no defaults in the template; set your own (below) |
+| `platform` | `github` (default) or `azure-devops`; see [GitHub or Azure DevOps](#github-or-azure-devops) |
+| `author_name`, `author_email`, `github_owner` | no defaults in the template; set your own (below). `github_owner` is asked only for GitHub |
+| `azure_devops_repo_url` | Azure DevOps only: the repository's clone URL, `https://dev.azure.com/<org>/<project>/_git/<repo>` |
 
 ### Your defaults
 

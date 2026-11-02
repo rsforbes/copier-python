@@ -1,6 +1,7 @@
 # Trivy configuration — read automatically by `trivy fs .` run from the repo
 # root, and passed to the CI and weekly scans (.github/workflows/ci.yml and
-# security.yml), so local and CI scans agree. A pull request's scan of its base
+# security.yml on GitHub, azure-pipelines.yml on Azure DevOps), so local and CI
+# scans agree. A pull request's scan of its base
 # reads the base's copy, so a PR that loosens this file passes on what it
 # hides: review its diff.
 #
