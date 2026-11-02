@@ -86,7 +86,8 @@
       extractVersionTemplate: "^v(?<version>.*)$",
     },
     {
-      // The uv release the Azure Pipelines CI installs.
+      // The uv release the Azure Pipelines CI installs (grouped with the dev
+      // container's uv image below).
       customType: "regex",
       description: "uv version in the generated Azure Pipelines CI",
       managerFilePatterns: ["/^template/[^/]*azure-pipelines\\.yml[^/]*\\.jinja$/"],
@@ -137,12 +138,20 @@
       semanticCommitType: "ci",
     },
     {
-      // Renovate fills ${VARIANT} in from `ARG VARIANT="[[ python_version
-      // ]]-trixie"`, so the tag it sees is Jinja, not a real one. The image
-      // follows python_version anyway.
+      // The dev container's base image: Renovate fills ${VARIANT} in from
+      // `ARG VARIANT="[[ python_version ]]-trixie"`, so the tag it sees is
+      // Jinja, not a real one. The image follows python_version anyway. The
+      // uv image the Dockerfile copies from stays managed.
       matchManagers: ["dockerfile"],
       matchFileNames: ["template/.devcontainer/Dockerfile.jinja"],
+      matchDepNames: ["mcr.microsoft.com/devcontainers/python"],
       enabled: false,
+    },
+    {
+      // The dev container's uv image and the Azure Pipelines CI's uvRelease
+      // in one PR, so both run the same uv.
+      matchPackageNames: ["ghcr.io/astral-sh/uv", "astral-sh/uv"],
+      groupName: "uv",
     },
     {
       matchManagers: ["github-actions"],

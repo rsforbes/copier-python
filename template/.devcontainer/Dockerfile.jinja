@@ -7,8 +7,8 @@ ARG VARIANT="[[ python_version ]]-trixie"
 # Use Microsoft's official Python dev container as the base image
 FROM mcr.microsoft.com/devcontainers/python:2-${VARIANT}
 
-# pipefail: a failed download in `curl ... | sh` fails the build instead of
-# piping an empty script to the shell, which exits 0 and leaves the tool out.
+# pipefail: a command failing on the left of a pipe fails the build instead
+# of passing silently.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # The base image's Yarn apt source (unused here) carries a signing key apt
@@ -21,9 +21,12 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list
 # The vscode user is pre-configured in the base image with development tools
 USER vscode
 
-# Install uv, the Python package/project manager.
-# The installer drops the `uv`/`uvx` binaries into ~/.local/bin.
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# uv, the Python package/project manager, copied from Astral's image at a
+# pinned version and digest rather than piped from astral.sh's install script,
+# which is served unpinned: whoever controls that script also controls the
+# checksum check inside it. Keep the version in step with uvRelease in the
+# Azure Pipelines CI; the template's Renovate bumps both together.
+COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /uvx /usr/local/bin/
 
 # Claude Code CLI, baked into the image so every rebuild has it with no manual
 # step. It runs here rather than on the host so its file edits and shell
@@ -38,12 +41,36 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 # through npm and so needs Node.js, while the native build is self-contained
 # and auto-updates. It lands in ~/.local/bin; login, settings, and history live
 # in ~/.claude, which devcontainer.json persists in a named volume so rebuilds
-# don't log you out. Set CLAUDE_CODE_VERSION to "latest" or e.g. "2.1.0" to
-# pin a release.
+# don't log you out.
+#
+# CLAUDE_CODE_VERSION is what gets installed: "stable", "latest", or e.g.
+# "2.1.0" to pin a release.
+#
+# The install is run by a release binary downloaded directly and checked
+# against the sha256 pinned below, not by claude.ai/install.sh: that script is
+# served unpinned and checks the binary against a manifest from the same host,
+# so a bad script or host would go unnoticed. The pinned binary is only the
+# installer, which then fetches CLAUDE_CODE_VERSION itself. Any recent release
+# works as the installer, so the pin needs no regular bumps. To bump: the new
+# version, and the linux-x64 and linux-arm64 checksums from
+# https://downloads.claude.ai/claude-code-releases/<version>/manifest.json
 ARG CLAUDE_CODE_VERSION="stable"
-RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}"
+ARG CLAUDE_CODE_INSTALLER="2.1.309"
+ARG CLAUDE_CODE_INSTALLER_SHA256_X64="4d704a8aecbe038affa3000f498ae17c1b4f753add8facb8764120affc99b658"
+ARG CLAUDE_CODE_INSTALLER_SHA256_ARM64="9796dd26899337f687739a0b39a7353b639f062a3436a7b941fcf19a1b757a9b"
+RUN case "$(uname -m)" in \
+      x86_64) arch=x64 sha256="${CLAUDE_CODE_INSTALLER_SHA256_X64}" ;; \
+      aarch64) arch=arm64 sha256="${CLAUDE_CODE_INSTALLER_SHA256_ARM64}" ;; \
+      *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;; \
+    esac \
+    && bin="$(mktemp)" \
+    && curl -fsSLo "$bin" "https://downloads.claude.ai/claude-code-releases/${CLAUDE_CODE_INSTALLER}/linux-${arch}/claude" \
+    && echo "${sha256}  ${bin}" | sha256sum -c - \
+    && chmod +x "$bin" \
+    && "$bin" install "${CLAUDE_CODE_VERSION}" \
+    && rm -f "$bin"
 
-# Add the installers' directory (~/.local/bin: uv, uvx, claude) to PATH
+# Add Claude Code's install directory (~/.local/bin) to PATH
 ENV PATH="/home/vscode/.local/bin:$PATH"
 
 # Keep the container's virtualenv out of the workspace. The workspace is the host's
