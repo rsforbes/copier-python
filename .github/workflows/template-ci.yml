@@ -11,7 +11,8 @@
 #   e.g. an apt source or a browser download that stopped working.
 # - `pre-commit`: the template repo's own hooks on its root files.
 # - `betterleaks-pin`: the generated CI's Betterleaks version and checksum (in
-#   both platforms' CI), which Renovate can only half-update.
+#   both platforms' CI), which Renovate can only half-update, then that binary
+#   scanning this repo's full git history for secrets.
 # - `passed`: passes only when every job above did. It is the check the main
 #   branch ruleset requires (with the PR title check), so adding a flavor or
 #   platform, which renames the matrix jobs, doesn't need a ruleset change.
@@ -126,6 +127,13 @@ jobs:
   # can't compute the checksum, so check here that the version matches both
   # hook revs and the checksum matches the release, before a new project
   # finds out on its first push.
+  #
+  # Then the verified binary scans this repo's own full history, as a
+  # generated project's CI does for its own. The hook here only sees staged
+  # changes and is skipped above, so without this a secret committed with
+  # hooks bypassed would go unseen. False positives go in a root
+  # .betterleaksignore (fingerprints; template/.betterleaksignore is only for
+  # generated projects) or a `betterleaks:allow` comment on the line.
   betterleaks-pin:
     name: Betterleaks pin
     runs-on: ubuntu-latest
@@ -133,6 +141,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0 # full history: a secret removed in a later commit is still leaked
       - name: Check version and checksum
         run: |
           github=template/.github/workflows/ci.yml.jinja
@@ -159,6 +168,9 @@ jobs:
             echo "::error::BETTERLEAKS_SHA256 does not match the v${version} release; take the linux_x64 sha256 from its checksums.txt"
             exit 1
           fi
+          tar -xzf "$tarball" betterleaks
+      - name: Scan git history
+        run: ./betterleaks git --redact --verbose --no-banner .
 
   devcontainer:
     name: Dev container (${{ matrix.flavor }}, ${{ matrix.platform }})
