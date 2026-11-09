@@ -199,7 +199,7 @@ jobs:
             --data-file .github/ci-answers.yml -d flavor="$FLAVOR" -d platform="$PLATFORM" \
             . "$RUNNER_TEMP/demo-project"
       - name: Build and start the dev container
-        run: npx --yes @devcontainers/cli@0.89.0 up --workspace-folder "$RUNNER_TEMP/demo-project"
+        run: npx --yes @devcontainers/cli@0.90.0 up --workspace-folder "$RUNNER_TEMP/demo-project"
       - name: Check tools inside the container
         env:
           FLAVOR: ${{ matrix.flavor }}
@@ -208,7 +208,7 @@ jobs:
           # The script runs in the container's shell, so its $ must not
           # expand here.
           # shellcheck disable=SC2016
-          npx --yes @devcontainers/cli@0.89.0 exec --workspace-folder "$RUNNER_TEMP/demo-project" \
+          npx --yes @devcontainers/cli@0.90.0 exec --workspace-folder "$RUNNER_TEMP/demo-project" \
             env FLAVOR="$FLAVOR" PLATFORM="$PLATFORM" bash -euc '
               claude --version
               if [ "$PLATFORM" = github ]; then
