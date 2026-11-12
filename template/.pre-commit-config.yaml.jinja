@@ -40,7 +40,7 @@ repos:
   # require_serial: one Semgrep process for all files, instead of one per CPU
   # each fetching and compiling the rulesets.
   - repo: https://github.com/semgrep/pre-commit
-    rev: dfdeebdd309a043859ba33a555839911e7b11801 # frozen: v1.182.1
+    rev: e85cc41d57d8c4cc95d97c8813051744e51bd061 # frozen: v1.184.0
     hooks:
       - id: semgrep
         types_or: [python, yaml, dockerfile]
@@ -72,7 +72,7 @@ repos:
   # without one it runs the offline audits only. False positives:
   # `# zizmor: ignore[<audit>]` on the flagged line.
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
-    rev: c92afdf2c6ca336aaa8f39e2bd8d48f62dbd8e1f # frozen: v1.31.1
+    rev: 06a39750ec31860bb44f2acf67182c40016cd1e7 # frozen: v1.32.0
     hooks:
       - id: zizmor
 [%- else %]
@@ -81,7 +81,7 @@ repos:
   # schema (misspelled keys, wrong types), which Azure DevOps otherwise reports
   # only when the pipeline runs.
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0494aa7fa1314e98913a41227d8f0a515b2c1049 # frozen: 0.38.2
+    rev: a76b92851fc9eede9f9bc4073eb55202f34eb0df # frozen: 0.39.0
     hooks:
       - id: check-azure-pipelines
 [%- endif %]
