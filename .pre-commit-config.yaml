@@ -19,7 +19,7 @@ repos:
       - id: betterleaks
 
   - repo: https://github.com/semgrep/pre-commit
-    rev: dfdeebdd309a043859ba33a555839911e7b11801 # frozen: v1.182.1
+    rev: e85cc41d57d8c4cc95d97c8813051744e51bd061 # frozen: v1.184.0
     hooks:
       - id: semgrep
         types_or: [yaml]
@@ -38,6 +38,6 @@ repos:
       - id: actionlint
 
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
-    rev: c92afdf2c6ca336aaa8f39e2bd8d48f62dbd8e1f # frozen: v1.31.1
+    rev: 06a39750ec31860bb44f2acf67182c40016cd1e7 # frozen: v1.32.0
     hooks:
       - id: zizmor
