@@ -10,17 +10,25 @@
 #]
 
 [#-
-  Reads the Betterleaks version from the betterleaks hook's `# frozen:` comment
-  in .pre-commit-config.yaml, so the commit-time hook and the CI scan can't
-  drift onto different versions, and hands it to the later steps as REV.
+  Reads the Betterleaks version from the betterleaks hook in
+  .pre-commit-config.yaml, so the commit-time hook and the CI scan can't drift
+  onto different versions, and hands it to the later steps as REV. Fails unless
+  the hook's `# frozen:` tag still names the commit SHA in its `rev:`.
   error: the prefix that makes a log line an error annotation.
   output: the line that passes $rev to the later steps.
 #]
 [%- macro betterleaks_resolve(error, output) %]
-          rev=$(grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
-            | sed -n 's/.*# frozen: \(v[0-9][0-9.]*\)$/\1/p')
-          if [ -z "$rev" ]; then
-            echo "[[ error ]]Could not read the betterleaks version from .pre-commit-config.yaml"
+          entry=$(grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
+            | grep '^ *rev: ' || true)
+          sha=$(printf '%s\n' "$entry" | sed -n 's/^ *rev: \([0-9a-f]\{40\}\) # frozen: v[0-9][0-9.]*$/\1/p')
+          rev=$(printf '%s\n' "$entry" | sed -n 's/^ *rev: [0-9a-f]\{40\} # frozen: \(v[0-9][0-9.]*\)$/\1/p')
+          if [ "$(printf '%s\n' "$entry" | wc -l)" -ne 1 ] || [ -z "$sha" ] || [ -z "$rev" ]; then
+            echo "[[ error ]]Expected one betterleaks hook pinned as 'rev: <sha> # frozen: vX.Y.Z' in .pre-commit-config.yaml"
+            exit 1
+          fi
+          tagged=$(git ls-remote https://github.com/betterleaks/betterleaks "refs/tags/$rev" "refs/tags/$rev^{}" | cut -f1)
+          if ! printf '%s\n' "$tagged" | grep -qx "$sha"; then
+            echo "[[ error ]]betterleaks $rev does not name commit $sha, the rev in .pre-commit-config.yaml"
             exit 1
           fi
           echo "Scanning with betterleaks $rev"

@@ -147,6 +147,11 @@ jobs:
           azure="template/[% if platform == 'azure-devops' %]azure-pipelines.yml[% endif %].jinja"
           release=$(sed -n 's/^ *cosignRelease: *//p' "$azure")
           sha256=$(sed -n 's/^ *cosignSha256: *//p' "$azure")
+          if ! printf '%s\n' "$release" | grep -qxE 'v[0-9]+\.[0-9]+\.[0-9]+' \
+              || ! printf '%s\n' "$sha256" | grep -qxE '[0-9a-f]{64}'; then
+            echo "::error::Could not read one cosignRelease (vX.Y.Z) and one cosignSha256 from ${azure}"
+            exit 1
+          fi
           curl -fsSL -o "$RUNNER_TEMP/cosign-azure" \
             "https://github.com/sigstore/cosign/releases/download/${release}/cosign-linux-amd64"
           if ! echo "${sha256}  $RUNNER_TEMP/cosign-azure" | sha256sum -c -; then
@@ -154,21 +159,41 @@ jobs:
             exit 1
           fi
 
-      # The version is read from the betterleaks hook's `# frozen:` comment in
-      # .pre-commit-config.yaml rather than written here, so the commit-time
-      # hook and this scan cannot drift onto different versions. Renovate
-      # bumps it there.
+      # The version is read from the betterleaks hook in .pre-commit-config.yaml
+      # rather than written here, so the commit-time hook and this scan cannot
+      # drift onto different versions. The hook pins a commit SHA with its tag
+      # in the `# frozen:` comment; the step checks that the tag still names
+      # that commit, so an edit to one without the other fails here. Renovate
+      # bumps both.
       - name: Resolve the betterleaks version from the pre-commit config
         id: betterleaks
         run: |
-          rev=$(grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
-            | sed -n 's/.*# frozen: \(v[0-9][0-9.]*\)$/\1/p')
-          if [ -z "$rev" ]; then
-            echo "::error::Could not read the betterleaks version from .pre-commit-config.yaml"
+          entry=$(grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
+            | grep '^ *rev: ' || true)
+          sha=$(printf '%s\n' "$entry" | sed -n 's/^ *rev: \([0-9a-f]\{40\}\) # frozen: v[0-9][0-9.]*$/\1/p')
+          rev=$(printf '%s\n' "$entry" | sed -n 's/^ *rev: [0-9a-f]\{40\} # frozen: \(v[0-9][0-9.]*\)$/\1/p')
+          if [ "$(printf '%s\n' "$entry" | wc -l)" -ne 1 ] || [ -z "$sha" ] || [ -z "$rev" ]; then
+            echo "::error::Expected one betterleaks hook pinned as 'rev: <sha> # frozen: vX.Y.Z' in .pre-commit-config.yaml"
+            exit 1
+          fi
+          tagged=$(git ls-remote https://github.com/betterleaks/betterleaks "refs/tags/$rev" "refs/tags/$rev^{}" | cut -f1)
+          if ! printf '%s\n' "$tagged" | grep -qx "$sha"; then
+            echo "::error::betterleaks $rev does not name commit $sha, the rev in .pre-commit-config.yaml"
             exit 1
           fi
           echo "Scanning with betterleaks $rev"
           echo "rev=$rev" >> "$GITHUB_OUTPUT"
+
+      # Generated projects run the template's hook, not this repo's. Renovate
+      # bumps the two together; check they agree, so the version verified here
+      # is the one every new project will verify.
+      - name: Check the template's betterleaks hook matches
+        run: |
+          pin() { grep -A1 'repo: https://github.com/betterleaks/betterleaks$' "$1" | grep '^ *rev: ' | sed 's/^ *//'; }
+          if [ "$(pin .pre-commit-config.yaml)" != "$(pin template/.pre-commit-config.yaml.jinja)" ]; then
+            echo "::error::The betterleaks rev differs between .pre-commit-config.yaml and template/.pre-commit-config.yaml.jinja"
+            exit 1
+          fi
 
       # Installed from the published release binary rather than run as a
       # container image. Three reasons, in order of weight:
@@ -182,12 +207,11 @@ jobs:
       # against the exact tag's workflow identity rejects a checksums.txt that
       # anyone else produced — a stolen upload token included — and the
       # archive is then checked against the signed checksums. This needs no
-      # hand edit per release, so a Dependabot bump of the pre-commit rev
-      # passes on its own and no person reviews the new binary, which is
-      # accepted on purpose. Two things guard it: the Dependabot cooldown on
-      # the pre-commit ecosystem (a bad release usually surfaces within the
-      # window) and this signature (only betterleaks' release workflow can
-      # produce one).
+      # hand edit per release, so a Renovate bump of the hook rev passes on
+      # its own and no person reviews the new binary, which is accepted on
+      # purpose. Two things guard it: Renovate's 7-day minimumReleaseAge (a
+      # bad release usually surfaces within the window) and this signature
+      # (only betterleaks' release workflow can produce one).
       #
       # `gh release verify-asset` was considered: it needs no extra tool, but
       # GitHub's release attestation only proves the file was published in a

@@ -169,10 +169,12 @@ jobs:
           persist-credentials: false
           fetch-depth: 0 # full history: a secret removed in a later commit is still leaked
 
-      # The version is read from the betterleaks hook's `# frozen:` comment in
-      # .pre-commit-config.yaml rather than written here, so the commit-time
-      # hook and this scan cannot drift onto different versions. Dependabot's
-      # pre-commit ecosystem bumps it there.
+      # The version is read from the betterleaks hook in .pre-commit-config.yaml
+      # rather than written here, so the commit-time hook and this scan cannot
+      # drift onto different versions. The hook pins a commit SHA with its tag
+      # in the `# frozen:` comment; the step checks that the tag still names
+      # that commit, so an edit to one without the other fails here.
+      # Dependabot's pre-commit ecosystem bumps both.
       - name: Resolve the betterleaks version from the pre-commit config
         id: betterleaks
         run: |[[- betterleaks_resolve(error='::error::', output='echo "rev=$rev" >> "$GITHUB_OUTPUT"') ]]

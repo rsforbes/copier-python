@@ -194,10 +194,12 @@ jobs:
   - job: betterleaks
     displayName: Secrets (Betterleaks)
     variables:
-      # Betterleaks is verified by signature with cosign, as in the GitHub CI,
-      # whose comment above its Install steps says why. Azure Pipelines has no
-      # cosign installer, so cosign itself is pinned here by release and by
-      # the sha256 of cosign-linux-amd64 from the release's
+      # Betterleaks is verified by its signature: cosign checks that the
+      # release's checksums.txt was signed by Betterleaks' own release workflow
+      # for that exact tag, then the archive is checked against it, so neither
+      # a swapped file nor an upload made with a stolen token passes. Azure
+      # Pipelines has no cosign installer, so cosign itself is pinned here by
+      # release and by the sha256 of cosign-linux-amd64 from the release's
       # cosign_checksums.txt. (Not COSIGN_*: cosign reads COSIGN_* environment
       # variables, and pipeline variables become environment variables.)
       cosignRelease: v3.1.4
@@ -208,17 +210,20 @@ jobs:
       - script: |
           set -eu[[- betterleaks_resolve(error='##vso[task.logissue type=error]', output='echo "##vso[task.setvariable variable=REV]$rev"') ]]
         displayName: Resolve the Betterleaks version from the pre-commit config
-      # Unpacked under the agent's tools directory, like uv, rather than a
-      # directory a self-hosted agent shares with whatever else its user
-      # installed.
+      # Downloaded and checked in the temp directory, then moved under the
+      # agent's tools directory like uv, so an unchecked download never lands
+      # where a self-hosted agent keeps tools between jobs. The rename is
+      # atomic, so a job already running that cosign is undisturbed.
       - script: |
           set -euo pipefail
+          cd "$(Agent.TempDirectory)"
+          curl -fsSL -o cosign \
+            "https://github.com/sigstore/cosign/releases/download/$(cosignRelease)/cosign-linux-amd64"
+          echo "$(cosignSha256)  cosign" | sha256sum -c -
           dir="$(Agent.ToolsDirectory)/cosign/$(cosignRelease)"
           mkdir -p "$dir"
-          curl -fsSL -o "$dir/cosign" \
-            "https://github.com/sigstore/cosign/releases/download/$(cosignRelease)/cosign-linux-amd64"
-          echo "$(cosignSha256)  $dir/cosign" | sha256sum -c -
-          chmod +x "$dir/cosign"
+          install -m 0755 cosign "$dir/cosign.$$"
+          mv -f "$dir/cosign.$$" "$dir/cosign"
           echo "##vso[task.prependpath]$dir"
         displayName: Install cosign
       - script: |
