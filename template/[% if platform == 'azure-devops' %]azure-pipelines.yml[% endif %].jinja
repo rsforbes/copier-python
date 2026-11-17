@@ -250,8 +250,8 @@ jobs:
       # (`git ls-remote https://github.com/aquasecurity/trivy refs/tags/vX.Y.Z`).
       - script: |
           set -euo pipefail
-          curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/e713f67f7d54decdcd9b3132c9751833dcced698/contrib/install.sh \
-            | sh -s -- -b "$(Agent.ToolsDirectory)/trivy" v0.76.1
+          curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/3f6334d223b52188324af3b9923b4249cd206652/contrib/install.sh \
+            | sh -s -- -b "$(Agent.ToolsDirectory)/trivy" v0.76.2
           echo "##vso[task.prependpath]$(Agent.ToolsDirectory)/trivy"
         displayName: Install Trivy
       - script: trivy fs --config trivy.yaml --format json --output trivy-results.json --exit-code 0 .
