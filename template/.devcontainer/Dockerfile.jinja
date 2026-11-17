@@ -36,12 +36,10 @@ RUN case "$(uname -m)" in \
     && tarball="uv-${target}.tar.gz" \
     && url="https://github.com/astral-sh/uv/releases/download/${uvRelease}/${tarball}" \
     && dir="$(mktemp -d)" \
-    && cd "$dir" \
-    && curl -fsSLO "$url" \
-    && curl -fsSL "${url}.sha256" | sha256sum -c - \
-    && tar -xzf "$tarball" --strip-components=1 "uv-${target}/uv" "uv-${target}/uvx" \
-    && install -m 0755 uv uvx /usr/local/bin/ \
-    && cd / \
+    && curl -fsSLo "$dir/$tarball" "$url" \
+    && echo "$(curl -fsSL "${url}.sha256" | cut -d' ' -f1)  $dir/$tarball" | sha256sum -c - \
+    && tar -xzf "$dir/$tarball" -C "$dir" --strip-components=1 "uv-${target}/uv" "uv-${target}/uvx" \
+    && install -m 0755 "$dir/uv" "$dir/uvx" /usr/local/bin/ \
     && rm -rf "$dir"
 
 # Switch from root to the vscode user for security and proper file permissions

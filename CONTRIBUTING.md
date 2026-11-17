@@ -111,10 +111,11 @@ The template repo uses the same tooling it gives projects:
 - **Renovate** (`.github/renovate.json5`) keeps the versions pinned under
   `template/` current: action SHAs (including in `.jinja` workflows), hook
   revs, dev dependency ranges, Trivy, Betterleaks, the dev container
-  features, and uv and Trivy in `azure-pipelines.yml`. Azure DevOps projects
-  have no Dependabot, so they get these through `copier update`. The dev
-  container lock (`devcontainer-lock.json.jinja`) holds both platforms' CLI
-  features. Each PR runs Template CI against a generated project. Betterleaks
+  features, uv in `azure-pipelines.yml` and the dev container's Dockerfile
+  (one PR for both; Template CI fails if they differ), and Trivy in
+  `azure-pipelines.yml`. Azure DevOps projects have no Dependabot, so they
+  get these through `copier update`. The dev container lock
+  (`devcontainer-lock.json.jinja`) holds both platforms' CLI features. Each PR runs Template CI against a generated project. Betterleaks
   PRs need nothing more: CI reads the version from the hook and verifies the
   release by its signature. cosign PRs (the Azure DevOps CI's `cosignRelease`)
   need one manual step: push the new `cosignSha256` (the sha256 of

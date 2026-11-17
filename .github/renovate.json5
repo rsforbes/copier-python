@@ -83,16 +83,23 @@
       datasourceTemplate: "github-releases",
     },
     {
-      // The uv release the Azure Pipelines CI and the dev container install.
-      // Both read GitHub releases, so both get the same version after the same
-      // 7-day wait, in one PR (the "uv" group below).
+      // The uv release the Azure Pipelines CI installs. The dev container's
+      // (next) reads the same GitHub releases, so both get the same version
+      // after the same 7-day wait, in one PR (the "uv" group below); Template
+      // CI fails if they differ.
       customType: "regex",
-      description: "uv version in the generated Azure Pipelines CI and dev container",
-      managerFilePatterns: [
-        "/^template/[^/]*azure-pipelines\\.yml[^/]*\\.jinja$/",
-        "/^template/\\.devcontainer/Dockerfile\\.jinja$/",
-      ],
-      matchStrings: ["uvRelease: (?<currentValue>\\S+)", 'ARG uvRelease="(?<currentValue>[^"]+)"'],
+      description: "uv version in the generated Azure Pipelines CI",
+      managerFilePatterns: ["/^template/[^/]*azure-pipelines\\.yml[^/]*\\.jinja$/"],
+      matchStrings: ["\\n  uvRelease: (?<currentValue>\\S+)\\n"],
+      depNameTemplate: "astral-sh/uv",
+      datasourceTemplate: "github-releases",
+    },
+    {
+      // The uv release the dev container installs (see above).
+      customType: "regex",
+      description: "uv version in the generated dev container",
+      managerFilePatterns: ["/^template/\\.devcontainer/Dockerfile\\.jinja$/"],
+      matchStrings: ['\\nARG uvRelease="(?<currentValue>[^"]+)"\\n'],
       depNameTemplate: "astral-sh/uv",
       datasourceTemplate: "github-releases",
     },
