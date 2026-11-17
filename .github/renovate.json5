@@ -70,20 +70,17 @@
       datasourceTemplate: "github-releases",
     },
     {
-      // BETTERLEAKS_VERSION in the generated CI, on both platforms. Its
-      // BETTERLEAKS_SHA256 can't be computed by Renovate: the PR fails
-      // Template CI's checksum check until you push the new sha256 (from the
-      // release's checksums.txt) to the branch.
+      // The cosign release the generated Azure Pipelines CI installs to verify
+      // Betterleaks. Its cosignSha256 can't be computed by Renovate: the PR
+      // fails Template CI's cosign pin check until you push the new sha256 (of
+      // cosign-linux-amd64, from the release's cosign_checksums.txt) to the
+      // branch.
       customType: "regex",
-      description: "Betterleaks version in the generated CI",
-      managerFilePatterns: [
-        "/^template/\\.github/workflows/ci\\.yml\\.jinja$/",
-        "/^template/[^/]*azure-pipelines\\.yml[^/]*\\.jinja$/",
-      ],
-      matchStrings: ["BETTERLEAKS_VERSION: (?<currentValue>\\S+)"],
-      depNameTemplate: "betterleaks/betterleaks",
+      description: "cosign release in the generated Azure Pipelines CI",
+      managerFilePatterns: ["/^template/[^/]*azure-pipelines\\.yml[^/]*\\.jinja$/"],
+      matchStrings: ["cosignRelease: (?<currentValue>v\\S+)"],
+      depNameTemplate: "sigstore/cosign",
       datasourceTemplate: "github-releases",
-      extractVersionTemplate: "^v(?<version>.*)$",
     },
     {
       // The uv release the Azure Pipelines CI installs (grouped with the dev
@@ -181,8 +178,8 @@
       groupName: "Trivy",
     },
     {
-      // The hook rev and the CI's BETTERLEAKS_VERSION must move together (the
-      // generated CI fails when they differ), so one PR for both.
+      // The root and template hook revs, in one PR. CI reads its version from
+      // the hook, so nothing else moves with them.
       matchPackageNames: ["betterleaks/betterleaks"],
       groupName: "Betterleaks",
     },
