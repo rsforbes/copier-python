@@ -83,12 +83,16 @@
       datasourceTemplate: "github-releases",
     },
     {
-      // The uv release the Azure Pipelines CI installs (grouped with the dev
-      // container's uv image below).
+      // The uv release the Azure Pipelines CI and the dev container install.
+      // Both read GitHub releases, so both get the same version after the same
+      // 7-day wait, in one PR (the "uv" group below).
       customType: "regex",
-      description: "uv version in the generated Azure Pipelines CI",
-      managerFilePatterns: ["/^template/[^/]*azure-pipelines\\.yml[^/]*\\.jinja$/"],
-      matchStrings: ["uvRelease: (?<currentValue>\\S+)"],
+      description: "uv version in the generated Azure Pipelines CI and dev container",
+      managerFilePatterns: [
+        "/^template/[^/]*azure-pipelines\\.yml[^/]*\\.jinja$/",
+        "/^template/\\.devcontainer/Dockerfile\\.jinja$/",
+      ],
+      matchStrings: ["uvRelease: (?<currentValue>\\S+)", 'ARG uvRelease="(?<currentValue>[^"]+)"'],
       depNameTemplate: "astral-sh/uv",
       datasourceTemplate: "github-releases",
     },
@@ -137,17 +141,16 @@
     {
       // The dev container's base image: Renovate fills ${VARIANT} in from
       // `ARG VARIANT="[[ python_version ]]-trixie"`, so the tag it sees is
-      // Jinja, not a real one. The image follows python_version anyway. The
-      // uv image the Dockerfile copies from stays managed.
+      // Jinja, not a real one. The image follows python_version anyway.
       matchManagers: ["dockerfile"],
       matchFileNames: ["template/.devcontainer/Dockerfile.jinja"],
       matchDepNames: ["mcr.microsoft.com/devcontainers/python"],
       enabled: false,
     },
     {
-      // The dev container's uv image and the Azure Pipelines CI's uvRelease
-      // in one PR, so both run the same uv.
-      matchPackageNames: ["ghcr.io/astral-sh/uv", "astral-sh/uv"],
+      // The dev container's and the Azure Pipelines CI's uvRelease in one PR,
+      // so both run the same uv.
+      matchPackageNames: ["astral-sh/uv"],
       groupName: "uv",
     },
     {
