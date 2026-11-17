@@ -10,9 +10,9 @@
 #   tools inside it. This catches breakage in the Dockerfile or post-create,
 #   e.g. an apt source or a browser download that stopped working.
 # - `pre-commit`: the template repo's own hooks on its root files.
-# - `betterleaks-pin`: the generated CI's Betterleaks version and checksum (in
-#   both platforms' CI), which Renovate can only half-update, then that binary
-#   scanning this repo's full git history for secrets.
+# - `betterleaks`: the Azure DevOps CI's cosign checksum, which Renovate can
+#   only half-update, then Betterleaks, verified by signature, scanning this
+#   repo's full git history for secrets.
 # - `passed`: passes only when every job above did. It is the check the main
 #   branch ruleset requires (with the PR title check), so adding a flavor or
 #   platform, which renames the matrix jobs, doesn't need a ruleset change.
@@ -122,55 +122,123 @@ jobs:
           # Enables zizmor's online audits; read-only (contents: read).
           GH_TOKEN: ${{ github.token }}
 
-  # The generated CI downloads Betterleaks by BETTERLEAKS_VERSION and checks
-  # BETTERLEAKS_SHA256. Renovate bumps the version (with the hook revs) but
-  # can't compute the checksum, so check here that the version matches both
-  # hook revs and the checksum matches the release, before a new project
-  # finds out on its first push.
+  # A generated project's CI verifies Betterleaks by signature with cosign. On
+  # Azure DevOps cosign itself is pinned by release and checksum, which
+  # Renovate bumps (cosignRelease) but can't compute, so check the checksum
+  # here, before a new project finds out on its first push.
   #
-  # Then the verified binary scans this repo's own full history, as a
-  # generated project's CI does for its own. The hook here only sees staged
-  # changes and is skipped above, so without this a secret committed with
-  # hooks bypassed would go unseen. False positives go in a root
-  # .betterleaksignore (fingerprints; template/.betterleaksignore is only for
-  # generated projects) or a `betterleaks:allow` comment on the line.
-  betterleaks-pin:
-    name: Betterleaks pin
+  # Then Betterleaks, verified the same way as in a generated project, scans
+  # this repo's own full history, as a generated project's CI does for its
+  # own. The hook here only sees staged changes and is skipped above, so
+  # without this a secret committed with hooks bypassed would go unseen. False
+  # positives go in a root .betterleaksignore (fingerprints;
+  # template/.betterleaksignore is only for generated projects) or a
+  # `betterleaks:allow` comment on the line.
+  betterleaks:
+    name: Betterleaks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0 # full history: a secret removed in a later commit is still leaked
-      - name: Check version and checksum
+      - name: Check the Azure DevOps cosign pin
         run: |
-          github=template/.github/workflows/ci.yml.jinja
           azure="template/[% if platform == 'azure-devops' %]azure-pipelines.yml[% endif %].jinja"
-          version=$(sed -n 's/^ *BETTERLEAKS_VERSION: *//p' "$github")
-          sha256=$(sed -n 's/^ *BETTERLEAKS_SHA256: *//p' "$github")
-          # The two platforms' CI must carry the same pin, so the checks
-          # below (and the download) run once, on the GitHub one.
-          if [ "$(sed -n 's/^ *BETTERLEAKS_VERSION: *//p' "$azure")" != "$version" ] \
-              || [ "$(sed -n 's/^ *BETTERLEAKS_SHA256: *//p' "$azure")" != "$sha256" ]; then
-            echo "::error::BETTERLEAKS_VERSION and BETTERLEAKS_SHA256 differ between ${github} and ${azure}"
+          release=$(sed -n 's/^ *cosignRelease: *//p' "$azure")
+          sha256=$(sed -n 's/^ *cosignSha256: *//p' "$azure")
+          curl -fsSL -o "$RUNNER_TEMP/cosign-azure" \
+            "https://github.com/sigstore/cosign/releases/download/${release}/cosign-linux-amd64"
+          if ! echo "${sha256}  $RUNNER_TEMP/cosign-azure" | sha256sum -c -; then
+            echo "::error::cosignSha256 does not match the ${release} release; take cosign-linux-amd64's sha256 from its cosign_checksums.txt"
             exit 1
           fi
-          for config in template/.pre-commit-config.yaml.jinja .pre-commit-config.yaml; do
-            if ! grep -A1 'repo: https://github.com/betterleaks/betterleaks$' "$config" \
-                | grep -q "# frozen: v${version//./\\.}\$"; then
-              echo "::error::BETTERLEAKS_VERSION (${version}) does not match the betterleaks rev in ${config}"
-              exit 1
-            fi
-          done
-          tarball="betterleaks_${version}_linux_x64.tar.gz"
-          curl -fsSLO "https://github.com/betterleaks/betterleaks/releases/download/v${version}/${tarball}"
-          if ! echo "${sha256}  ${tarball}" | sha256sum -c -; then
-            echo "::error::BETTERLEAKS_SHA256 does not match the v${version} release; take the linux_x64 sha256 from its checksums.txt"
+
+      # The version is read from the betterleaks hook's `# frozen:` comment in
+      # .pre-commit-config.yaml rather than written here, so the commit-time
+      # hook and this scan cannot drift onto different versions. Renovate
+      # bumps it there.
+      - name: Resolve the betterleaks version from the pre-commit config
+        id: betterleaks
+        run: |
+          rev=$(grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
+            | sed -n 's/.*# frozen: \(v[0-9][0-9.]*\)$/\1/p')
+          if [ -z "$rev" ]; then
+            echo "::error::Could not read the betterleaks version from .pre-commit-config.yaml"
             exit 1
           fi
-          tar -xzf "$tarball" betterleaks
+          echo "Scanning with betterleaks $rev"
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
+
+      # Installed from the published release binary rather than run as a
+      # container image. Three reasons, in order of weight:
+      #
+      # The archive is verified by signature, so what executes is the binary
+      # betterleaks' own release workflow built for this tag, and nothing else.
+      # This is the one piece of third-party code that reads the entire tree
+      # and full history. betterleaks publishes immutable releases (assets
+      # and tag cannot change after publishing) and signs checksums.txt with
+      # Sigstore from .github/workflows/release.yml. Checking that signature
+      # against the exact tag's workflow identity rejects a checksums.txt that
+      # anyone else produced — a stolen upload token included — and the
+      # archive is then checked against the signed checksums. This needs no
+      # hand edit per release, so a Dependabot bump of the pre-commit rev
+      # passes on its own and no person reviews the new binary, which is
+      # accepted on purpose. Two things guard it: the Dependabot cooldown on
+      # the pre-commit ecosystem (a bad release usually surfaces within the
+      # window) and this signature (only betterleaks' release workflow can
+      # produce one).
+      #
+      # `gh release verify-asset` was considered: it needs no extra tool, but
+      # GitHub's release attestation only proves the file was published in a
+      # betterleaks release, which a stolen token can also do. The Sigstore
+      # identity proves which workflow built it.
+      #
+      # cosign fetches Sigstore's trusted root online, so a Sigstore outage
+      # fails this job. That is the right way to fail for a security gate; a
+      # re-run once Sigstore recovers clears it.
+      #
+      # It is the same delivery the pre-commit hook uses (a Go binary), so the
+      # commit-time scan and this one are one mechanism rather than two.
+      #
+      # And the scan itself runs anywhere the binary does. The dev container
+      # has no cosign, so to reproduce a CI result there, install the same
+      # release and run the Scan step's command; verification is CI's job.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Install betterleaks
+        env:
+          REV: ${{ steps.betterleaks.outputs.rev }}
+        run: |
+          ver="${REV#v}"
+          archive="betterleaks_${ver}_linux_x64.tar.gz"
+          base="https://github.com/betterleaks/betterleaks/releases/download/${REV}"
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o "$archive" "$base/$archive"
+          curl -fsSL -o checksums.txt "$base/checksums.txt"
+          curl -fsSL -o checksums.txt.sigstore.json "$base/checksums.txt.sigstore.json"
+          # The identity is the release workflow at this exact tag, not any
+          # tag: a signature from another release cannot vouch for this one.
+          cosign verify-blob checksums.txt \
+            --bundle checksums.txt.sigstore.json \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "https://github.com/betterleaks/betterleaks/.github/workflows/release.yml@refs/tags/${REV}"
+          # Exactly one line naming this archive (an exact field match, not a
+          # pattern), or the job stops; then sha256sum -c fails it on a hash
+          # mismatch.
+          awk -v a="$archive" '$2 == a' checksums.txt > archive.sha256
+          if [ "$(wc -l < archive.sha256)" -ne 1 ]; then
+            echo "::error::Expected exactly one checksum for $archive in checksums.txt"
+            exit 1
+          fi
+          sha256sum -c archive.sha256
+          tar xzf "$archive" betterleaks
+          ./betterleaks version
+
       - name: Scan git history
-        run: ./betterleaks git --redact --verbose --no-banner .
+        run: |
+          "$RUNNER_TEMP/betterleaks" git --redact --verbose --no-banner .
 
   devcontainer:
     name: Dev container (${{ matrix.flavor }}, ${{ matrix.platform }})
@@ -233,7 +301,7 @@ jobs:
     # always(): a failed or cancelled job must fail this check, not skip it;
     # a ruleset counts a skipped check as passing.
     if: always()
-    needs: [generate, pre-commit, betterleaks-pin, devcontainer]
+    needs: [generate, pre-commit, betterleaks, devcontainer]
     runs-on: ubuntu-latest
     steps:
       - name: Check every job passed

@@ -85,8 +85,9 @@ Template CI (`.github/workflows/template-ci.yml`) runs on every pull request:
 - **Dev container**: builds and starts each flavor's dev container (and an
   Azure DevOps one) and checks the tools inside it.
 - **Template pre-commit hooks**: this repo's own hooks on its root files.
-- **Betterleaks pin**: the generated CI's Betterleaks version and checksum
-  (see Renovate below).
+- **Betterleaks**: checks the Azure DevOps CI's cosign checksum (see
+  Renovate below), then scans this repo's full history with Betterleaks,
+  verified by signature as in a generated project.
 
 It also runs weekly, since the Dockerfile downloads things that can break
 without a commit. Its answers are in `.github/ci-answers.yml`.
@@ -114,9 +115,11 @@ The template repo uses the same tooling it gives projects:
   have no Dependabot, so they get these through `copier update`. The dev
   container lock (`devcontainer-lock.json.jinja`) holds both platforms' CLI
   features. Each PR runs Template CI against a generated project. Betterleaks
-  PRs need one manual step: push the new `BETTERLEAKS_SHA256` (from the
-  release's `checksums.txt`) to the PR branch; the `betterleaks-pin` job fails
-  until you do. Renovate runs as the
+  PRs need nothing more: CI reads the version from the hook and verifies the
+  release by its signature. cosign PRs (the Azure DevOps CI's `cosignRelease`)
+  need one manual step: push the new `cosignSha256` (the sha256 of
+  `cosign-linux-amd64`, from the release's `cosign_checksums.txt`) to the PR
+  branch; the `betterleaks` job fails until you do. Renovate runs as the
   [Renovate GitHub App](https://github.com/apps/renovate), installed on this
   repository. Its Dependency Dashboard (an issue it keeps open) lists what's
   tracked and what's waiting out the 7-day delay; don't tick a pending

@@ -1,4 +1,4 @@
-[% from 'partials/ci.jinja' import betterleaks_check, betterleaks_install, trivy_gate -%]
+[% from 'partials/ci.jinja' import betterleaks_resolve, betterleaks_install, trivy_gate -%]
 # CI — lint, run the test suite, guard the declared dependency floor, and run
 # the security scans. The Azure Pipelines counterpart of a GitHub project's
 # ci.yml and security.yml, with the same jobs and rules.
@@ -194,19 +194,37 @@ jobs:
   - job: betterleaks
     displayName: Secrets (Betterleaks)
     variables:
-      # Keep in step with the betterleaks rev in .pre-commit-config.yaml (the
-      # first step fails the job when they differ). To bump: update both, and
-      # take the linux_x64 sha256 from the release's checksums.txt.
-      BETTERLEAKS_VERSION: 1.9.0
-      BETTERLEAKS_SHA256: f8b185a39ffcece2a1ca82bf3a4e7435cd81963ffd16b7a9128daf75f35f6de7
+      # Betterleaks is verified by signature with cosign, as in the GitHub CI,
+      # whose comment above its Install steps says why. Azure Pipelines has no
+      # cosign installer, so cosign itself is pinned here by release and by
+      # the sha256 of cosign-linux-amd64 from the release's
+      # cosign_checksums.txt. (Not COSIGN_*: cosign reads COSIGN_* environment
+      # variables, and pipeline variables become environment variables.)
+      cosignRelease: v3.1.4
+      cosignSha256: 424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa
     steps:
       - checkout: self
         fetchDepth: '0' # full history: a secret removed in a later commit is still leaked
-      - script: |[[- betterleaks_check(error='##vso[task.logissue type=error]') ]]
-        displayName: Check version matches the pre-commit hook
-      - script: |[[- betterleaks_install() ]]
+      - script: |
+          set -eu[[- betterleaks_resolve(error='##vso[task.logissue type=error]', output='echo "##vso[task.setvariable variable=REV]$rev"') ]]
+        displayName: Resolve the Betterleaks version from the pre-commit config
+      # Unpacked under the agent's tools directory, like uv, rather than a
+      # directory a self-hosted agent shares with whatever else its user
+      # installed.
+      - script: |
+          set -euo pipefail
+          dir="$(Agent.ToolsDirectory)/cosign/$(cosignRelease)"
+          mkdir -p "$dir"
+          curl -fsSL -o "$dir/cosign" \
+            "https://github.com/sigstore/cosign/releases/download/$(cosignRelease)/cosign-linux-amd64"
+          echo "$(cosignSha256)  $dir/cosign" | sha256sum -c -
+          chmod +x "$dir/cosign"
+          echo "##vso[task.prependpath]$dir"
+        displayName: Install cosign
+      - script: |
+          set -eu[[- betterleaks_install(error='##vso[task.logissue type=error]', tmp='$(Agent.TempDirectory)') ]]
         displayName: Install Betterleaks
-      - script: ./betterleaks git --redact --verbose --no-banner .
+      - script: '"$(Agent.TempDirectory)/betterleaks" git --redact --verbose --no-banner .'
         displayName: Scan git history
 
   - job: trivy

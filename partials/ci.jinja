@@ -10,25 +10,56 @@
 #]
 
 [#-
-  Fails when BETTERLEAKS_VERSION doesn't match the betterleaks hook rev.
+  Reads the Betterleaks version from the betterleaks hook's `# frozen:` comment
+  in .pre-commit-config.yaml, so the commit-time hook and the CI scan can't
+  drift onto different versions, and hands it to the later steps as REV.
   error: the prefix that makes a log line an error annotation.
+  output: the line that passes $rev to the later steps.
 #]
-[%- macro betterleaks_check(error) %]
-          set -eu
-          if ! grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
-              | grep -q "# frozen: v${BETTERLEAKS_VERSION//./\\.}\$"; then
-            echo "[[ error ]]BETTERLEAKS_VERSION (${BETTERLEAKS_VERSION}) does not match the betterleaks rev in .pre-commit-config.yaml; bump BETTERLEAKS_VERSION and BETTERLEAKS_SHA256"
+[%- macro betterleaks_resolve(error, output) %]
+          rev=$(grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
+            | sed -n 's/.*# frozen: \(v[0-9][0-9.]*\)$/\1/p')
+          if [ -z "$rev" ]; then
+            echo "[[ error ]]Could not read the betterleaks version from .pre-commit-config.yaml"
             exit 1
           fi
+          echo "Scanning with betterleaks $rev"
+          [[ output ]]
 [%- endmacro %]
 
-[#- Downloads Betterleaks and checks it against BETTERLEAKS_SHA256. #]
-[%- macro betterleaks_install() %]
-          set -eu
-          tarball="betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -fsSLO "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/${tarball}"
-          echo "${BETTERLEAKS_SHA256}  ${tarball}" | sha256sum -c -
-          tar -xzf "$tarball" betterleaks
+[#-
+  Downloads the Betterleaks release named by $REV into tmp and verifies it:
+  cosign checks that checksums.txt was signed by Betterleaks' release workflow
+  at that exact tag, then the archive is checked against it. Expects cosign on
+  PATH; the GitHub CI's comment above its Install steps says why.
+  error: the prefix that makes a log line an error annotation.
+  tmp: the job's temporary directory.
+#]
+[%- macro betterleaks_install(error, tmp) %]
+          ver="${REV#v}"
+          archive="betterleaks_${ver}_linux_x64.tar.gz"
+          base="https://github.com/betterleaks/betterleaks/releases/download/${REV}"
+          cd "[[ tmp ]]"
+          curl -fsSL -o "$archive" "$base/$archive"
+          curl -fsSL -o checksums.txt "$base/checksums.txt"
+          curl -fsSL -o checksums.txt.sigstore.json "$base/checksums.txt.sigstore.json"
+          # The identity is the release workflow at this exact tag, not any
+          # tag: a signature from another release cannot vouch for this one.
+          cosign verify-blob checksums.txt \
+            --bundle checksums.txt.sigstore.json \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "https://github.com/betterleaks/betterleaks/.github/workflows/release.yml@refs/tags/${REV}"
+          # Exactly one line naming this archive (an exact field match, not a
+          # pattern), or the job stops; then sha256sum -c fails it on a hash
+          # mismatch.
+          awk -v a="$archive" '$2 == a' checksums.txt > archive.sha256
+          if [ "$(wc -l < archive.sha256)" -ne 1 ]; then
+            echo "[[ error ]]Expected exactly one checksum for $archive in checksums.txt"
+            exit 1
+          fi
+          sha256sum -c archive.sha256
+          tar xzf "$archive" betterleaks
+          ./betterleaks version
 [%- endmacro %]
 
 [#-
