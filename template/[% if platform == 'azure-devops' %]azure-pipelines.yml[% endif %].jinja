@@ -229,7 +229,54 @@ jobs:
       - script: |
           set -eu[[- betterleaks_install(error='##vso[task.logissue type=error]', tmp='$(Agent.TempDirectory)') ]]
         displayName: Install Betterleaks
-      - script: '"$(Agent.TempDirectory)/betterleaks" git --redact --verbose --no-banner .'
+      # Suppressions come from main, never from the code under scan, so a
+      # change cannot quietly suppress its own finding: a new fingerprint or
+      # allowlist entry reaches main in a pull request of its own first. (A
+      # change to this pipeline or to the scanner's version can still alter
+      # the scan; that is a security change, reviewed as one.) The checkout's
+      # own files are scanned as plain content, then replaced with main's from
+      # origin/main, which the full-history checkout fetched: betterleaks reads
+      # an ignore file from the scan target whatever -i names, and a
+      # .betterleaks.toml when given no --config before 1.10.0. Main's config
+      # must still catch a planted secret. Inline betterleaks:allow comments
+      # are ignored (--ignore-gitleaks-allow).
+      - script: |
+          set -euo pipefail
+          if ! git rev-parse --verify -q origin/main > /dev/null; then
+            echo "##vso[task.logissue type=error]origin/main was not fetched, so main's suppression files can't be read"
+            exit 1
+          fi
+          submitted="$(Agent.TempDirectory)/submitted"
+          mkdir -p "$submitted"
+          for f in .betterleaks.toml .betterleaksignore .gitleaksignore; do
+            if [ -f "$f" ]; then cp "$f" "$submitted/${f#.}.txt"; fi
+          done
+          rm -f .betterleaks.toml .betterleaksignore .gitleaksignore
+          for f in .betterleaks.toml .betterleaksignore; do
+            if git cat-file -e "origin/main:$f" 2> /dev/null; then
+              git show "origin/main:$f" > "$f"
+              echo "Using main's $f"
+            fi
+          done
+          if [ ! -f .betterleaks.toml ]; then
+            printf '[extend]\nuseDefault = true\n' > .betterleaks.toml
+            echo "main has no .betterleaks.toml; using the default rules alone"
+          fi
+          canary="$(Agent.TempDirectory)/canary"
+          mkdir -p "$canary"
+          printf 'db_password = "%s"\n' "$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)" \
+            > "$canary/canary.py"
+          if "$(Agent.TempDirectory)/betterleaks" dir "$canary" --config .betterleaks.toml --no-banner > /dev/null 2>&1; then
+            echo "##vso[task.logissue type=error]main's .betterleaks.toml lets a planted secret through, so the scan would pass anything"
+            exit 1
+          fi
+          if ! "$(Agent.TempDirectory)/betterleaks" dir "$submitted" --config .betterleaks.toml \
+              --ignore-gitleaks-allow --redact --verbose --no-banner; then
+            echo "##vso[task.logissue type=error]A suppression file in the checkout holds what looks like a secret"
+            exit 1
+          fi
+        displayName: Replace the suppression files with main's
+      - script: '"$(Agent.TempDirectory)/betterleaks" git --config .betterleaks.toml --ignore-gitleaks-allow --redact --verbose --no-banner .'
         displayName: Scan git history
 
   - job: trivy
