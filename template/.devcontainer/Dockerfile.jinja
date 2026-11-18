@@ -28,7 +28,7 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list
 # together, after the same 7-day wait. (Not UV_*: uv reads UV_* environment
 # variables, and a build argument is one in every later RUN.) Runs as root, to
 # install into /usr/local/bin.
-ARG uvRelease="0.13.5"
+ARG uvRelease="0.13.7"
 RUN case "$(uname -m)" in \
       x86_64|aarch64) target="$(uname -m)-unknown-linux-gnu" ;; \
       *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;; \
