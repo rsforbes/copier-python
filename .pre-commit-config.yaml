@@ -17,6 +17,7 @@ repos:
     rev: 8d77e1712fb06fd14444cc648686f1d5655e28a8 # frozen: v1.10.0
     hooks:
       - id: betterleaks
+        args: [--ignore-gitleaks-allow]
 
   - repo: https://github.com/semgrep/pre-commit
     rev: 14ad2383dd6f19216cc78ba8ea1d4f607fc29df1 # frozen: v1.185.0
