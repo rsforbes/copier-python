@@ -370,19 +370,35 @@ jobs:
           uvx copier copy --trust --defaults --vcs-ref HEAD \
             --data-file .github/ci-answers.yml -d flavor="$FLAVOR" -d platform="$PLATFORM" \
             . "$RUNNER_TEMP/demo-project"
+      # The dev container and the Azure Pipelines CI pin uv separately, and
+      # Renovate bumps them together; check they name the same release. The
+      # tool check below then confirms the built image carries it.
+      - name: Check the uv pins match
+        id: uv
+        run: |
+          docker_uv=$(sed -n 's/^ARG uvRelease="\(.*\)"$/\1/p' template/.devcontainer/Dockerfile.jinja)
+          azure_uv=$(sed -n 's/^  uvRelease: *//p' "template/[% if platform == 'azure-devops' %]azure-pipelines.yml[% endif %].jinja")
+          if [ -z "$docker_uv" ] || [ "$docker_uv" != "$azure_uv" ]; then
+            echo "::error::uvRelease differs between the dev container (${docker_uv:-none}) and the Azure Pipelines CI (${azure_uv:-none})"
+            exit 1
+          fi
+          echo "release=$docker_uv" >> "$GITHUB_OUTPUT"
       - name: Build and start the dev container
         run: npx --yes @devcontainers/cli@0.90.0 up --workspace-folder "$RUNNER_TEMP/demo-project"
       - name: Check tools inside the container
         env:
           FLAVOR: ${{ matrix.flavor }}
           PLATFORM: ${{ matrix.platform }}
+          # Not UV_*: uv reads UV_* environment variables.
+          EXPECTED_UV: ${{ steps.uv.outputs.release }}
         run: |
           # The script runs in the container's shell, so its $ must not
           # expand here.
           # shellcheck disable=SC2016
           npx --yes @devcontainers/cli@0.90.0 exec --workspace-folder "$RUNNER_TEMP/demo-project" \
-            env FLAVOR="$FLAVOR" PLATFORM="$PLATFORM" bash -euc '
+            env FLAVOR="$FLAVOR" PLATFORM="$PLATFORM" EXPECTED_UV="$EXPECTED_UV" bash -euc '
               claude --version
+              test "$(uv --version | cut -d" " -f2)" = "$EXPECTED_UV"
               if [ "$PLATFORM" = github ]; then
                 gh --version | head -1
               else

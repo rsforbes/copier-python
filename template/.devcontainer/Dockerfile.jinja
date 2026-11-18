@@ -17,16 +17,34 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # post_create_command.sh.
 RUN rm -f /etc/apt/sources.list.d/yarn.list
 
+# uv, the Python package/project manager, from its GitHub release at a pinned
+# version rather than piped from astral.sh's install script, which is served
+# unpinned: whoever controls that script also controls the checksum check
+# inside it. The archive is checked against the release's own .sha256. uv's
+# releases are immutable, so neither file can change once published.
+#
+# The same release, archive and check as the Azure Pipelines CI's uvRelease,
+# so the template's Renovate finds both pins in GitHub releases and bumps them
+# together, after the same 7-day wait. (Not UV_*: uv reads UV_* environment
+# variables, and a build argument is one in every later RUN.) Runs as root, to
+# install into /usr/local/bin.
+ARG uvRelease="0.13.5"
+RUN case "$(uname -m)" in \
+      x86_64|aarch64) target="$(uname -m)-unknown-linux-gnu" ;; \
+      *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;; \
+    esac \
+    && tarball="uv-${target}.tar.gz" \
+    && url="https://github.com/astral-sh/uv/releases/download/${uvRelease}/${tarball}" \
+    && dir="$(mktemp -d)" \
+    && curl -fsSLo "$dir/$tarball" "$url" \
+    && echo "$(curl -fsSL "${url}.sha256" | cut -d' ' -f1)  $dir/$tarball" | sha256sum -c - \
+    && tar -xzf "$dir/$tarball" -C "$dir" --strip-components=1 "uv-${target}/uv" "uv-${target}/uvx" \
+    && install -m 0755 "$dir/uv" "$dir/uvx" /usr/local/bin/ \
+    && rm -rf "$dir"
+
 # Switch from root to the vscode user for security and proper file permissions
 # The vscode user is pre-configured in the base image with development tools
 USER vscode
-
-# uv, the Python package/project manager, copied from Astral's image at a
-# pinned version and digest rather than piped from astral.sh's install script,
-# which is served unpinned: whoever controls that script also controls the
-# checksum check inside it. Keep the version in step with uvRelease in the
-# Azure Pipelines CI; the template's Renovate bumps both together.
-COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /uvx /usr/local/bin/
 
 # Claude Code CLI, baked into the image so every rebuild has it with no manual
 # step. It runs here rather than on the host so its file edits and shell
