@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.1](https://github.com/rsforbes/copier-python/compare/v0.4.0...v0.4.1) (2026-11-19)
+
+
+### Continuous Integration
+
+* **deps:** update dependency @devcontainers/cli to v0.90.0 ([#48](https://github.com/rsforbes/copier-python/issues/48)) ([c19e161](https://github.com/rsforbes/copier-python/commit/c19e161226c79e2d12d522a68b7597c26d704379))
+* **deps:** update dependency aquasecurity/trivy to v0.76.2 ([#50](https://github.com/rsforbes/copier-python/issues/50)) ([a30daf7](https://github.com/rsforbes/copier-python/commit/a30daf7c311df7208c61f95c8b95a8ef2df0bdd3))
+* **deps:** update dependency astral-sh/uv to v0.13.7 ([#47](https://github.com/rsforbes/copier-python/issues/47)) ([e8bd3cf](https://github.com/rsforbes/copier-python/commit/e8bd3cff6731d1eea02b3819ac2873174866e0d7))
+* **deps:** update dependency betterleaks/betterleaks to v1.10.0 ([#51](https://github.com/rsforbes/copier-python/issues/51)) ([d4c1e53](https://github.com/rsforbes/copier-python/commit/d4c1e53727ba146ea042fab0688cf3b6887a8800))
+* **deps:** update github actions ([#46](https://github.com/rsforbes/copier-python/issues/46)) ([a2c3139](https://github.com/rsforbes/copier-python/commit/a2c31399cc20c7a0f7493530f26a5593a1f4b4bc))
+* **deps:** update pre-commit hooks ([#49](https://github.com/rsforbes/copier-python/issues/49)) ([4f822fd](https://github.com/rsforbes/copier-python/commit/4f822fd50143bd84cd3c2da67529753a38ac22d5))
+* install the dev container's uv from GitHub releases ([#54](https://github.com/rsforbes/copier-python/issues/54)) ([ebe1a9b](https://github.com/rsforbes/copier-python/commit/ebe1a9b3941d80e36738d5f60713ede2f7807915))
+* read betterleaks suppressions from main in generated CI ([#55](https://github.com/rsforbes/copier-python/issues/55)) ([2c3e77d](https://github.com/rsforbes/copier-python/commit/2c3e77d4d51616f3013d8a38ac69e5a19a613e66))
+* verify betterleaks by signature in generated CI ([#52](https://github.com/rsforbes/copier-python/issues/52)) ([82e2406](https://github.com/rsforbes/copier-python/commit/82e24067421ae2a941594ff649c5099330bf6fee))
+
 ## [0.4.0](https://github.com/rsforbes/copier-python/compare/v0.3.1...v0.4.0) (2026-11-02)
 
 
